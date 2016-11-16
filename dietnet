@@ -1,0 +1,189 @@
+#!/usr/bin/env python
+
+# Copyright 2016 Goekcen Eraslan
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import os
+import numpy as np
+import six
+import tensorflow as tf
+slim = tf.contrib.slim
+
+FLAGS = tf.app.flags.FLAGS
+
+tf.app.flags.DEFINE_string('datadir', 'data',
+                                   """Directory of inputs""")
+tf.app.flags.DEFINE_integer('batchsize', 64,
+                                    """Batch size""")
+tf.app.flags.DEFINE_integer('hiddensize', 100,
+                                    """Size of hidden layers""")
+tf.app.flags.DEFINE_integer('embeddingsize', 500,
+                                    """Size of embedding layers""")
+tf.app.flags.DEFINE_float('learningrate', 1e-4,
+                                    """Learning rate""")
+tf.app.flags.DEFINE_float('gamma', 1,
+                                    """Loss weight of autoencoder""")
+tf.app.flags.DEFINE_integer('numclasses', 26,
+                                    """Total number of classes""")
+tf.app.flags.DEFINE_boolean('aux', True,
+                                    """Use auxiliary networks to reduce number of parameters.""")
+tf.app.flags.DEFINE_boolean('autoencoder', True,
+                                    """Enable autoencoder""")
+tf.app.flags.DEFINE_string('embeddingtype', 'rawend2end',
+                                    """Type of embedding: Only raw_end2end supported.""")
+tf.app.flags.DEFINE_boolean('shareembedding', True,
+                                    """Share embeddings of auxiliary nets""")
+
+
+def embedding(inputs, size, reuse=None, scope=None):
+    with slim.arg_scope([slim.fully_connected],
+                      weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                      weights_regularizer=slim.l2_regularizer(0.0005),
+                      biases_initializer=tf.constant_initializer(0.1),
+                      activation_fn=tf.nn.relu):
+
+        # Embedding layer, can be shared depending on the reuse parameter
+        net = slim.fully_connected(inputs,
+                                   size,
+                                   scope=scope,
+                                   reuse=reuse)
+    return net
+
+
+def auxnet(embedding, size, scope=None):
+    # MLP in auxiliary networks
+    with tf.variable_scope(scope, 'AuxNet'):
+        with slim.arg_scope([slim.fully_connected],
+                          weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                          weights_regularizer=slim.l2_regularizer(0.0005),
+                          biases_initializer=tf.constant_initializer(0.1),
+                          activation_fn=tf.nn.relu):
+
+            net = slim.fully_connected(embedding, size, scope='fc1')
+    return net
+
+
+def diet(inputs, labels,
+         batch_size=64,
+         hidden_size=100,
+         embedding_size=500,
+         use_aux=True,
+         xt = None,
+         autoencoder=True,
+         gamma=1,
+         share_embedding=True,
+         scope=None):
+
+    with slim.arg_scope([slim.fully_connected],
+                      weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                      weights_regularizer=slim.l2_regularizer(0.0005),
+                      biases_initializer=tf.constant_initializer(0.1),
+                      activation_fn=tf.nn.relu):
+
+        input_size = inputs.get_shape().as_list()[1]
+        output_size = labels.get_shape().as_list()[1]
+
+        if use_aux:
+            assert(xt is not None)
+            assert(xt.get_shape()[0] == inputs.get_shape()[1])
+
+            embed = embedding(xt, embedding_size, scope='auxembed')
+            We = auxnet(embed, hidden_size, scope='aux1')
+        else:
+            We = slim.model_variable('We',
+                                     shape=(input_size, hidden_size),
+                                     initializer=tf.truncated_normal_initializer(stddev=0.01),
+                                     regularizer=slim.l2_regularizer(0.0005))
+
+        output_h1 = tf.matmul(inputs, We)
+        output_h1 = tf.nn.relu(output_h1)
+
+        with tf.variable_scope(scope, 'DietNet'):
+            class_predictions = slim.fully_connected(output_h1, output_size,
+                                                     activation_fn=None, scope='fc1')
+
+        entropy_loss = slim.losses.softmax_cross_entropy(class_predictions, labels)
+
+        if autoencoder:
+            if use_aux:
+                if share_embedding:
+                    Wd = auxnet(embed, hidden_size, scope='aux2')
+                else:
+                    embed2 = embedding(xt, embedding_size, scope='auxembed2')
+                    Wd = auxnet(embed2, hidden_size, scope='aux2')
+                Wd = tf.transpose(Wd)
+            else:
+                Wd = slim.model_variable('Wd',
+                                         shape=(hidden_size, input_size),
+                                         initializer=tf.truncated_normal_initializer(stddev=0.01),
+                                         regularizer=slim.l2_regularizer(0.0005))
+
+            xhat = tf.matmul(output_h1, Wd)
+            mean_squared_loss = slim.losses.mean_squared_error(xhat,
+                                                               inputs,
+                                                               weight=gamma)
+
+
+def read_input(data_dir, batch_size, num_classes):
+    x = np.load(os.path.join(data_dir, 'genotypes_x.npy'))
+    xt = np.load(os.path.join(data_dir, 'genotypes_x_transpose.npy'))
+    y = np.load(os.path.join(data_dir, 'genotypes_y.npy'))
+    x_batch, y_batch = tf.train.shuffle_batch([x, y],
+                                              batch_size,
+                                              enqueue_many=True,
+                                              capacity=batch_size*100,
+                                              min_after_dequeue=batch_size*30)
+    y_batch = slim.one_hot_encoding(y_batch, num_classes)
+    assert(x_batch.get_shape()[0] == y_batch.get_shape()[0])
+
+    return (tf.cast(x_batch, tf.float32),
+            tf.convert_to_tensor(xt, tf.float32),
+            tf.cast(y_batch, tf.float32))
+
+
+def main(argv=None):
+    x, xt, y = read_input(FLAGS.datadir, FLAGS.batchsize, FLAGS.numclasses)
+    net = diet(x, y, xt=xt,
+               batch_size=FLAGS.batchsize,
+               hidden_size=FLAGS.hiddensize,
+               embedding_size=FLAGS.embeddingsize,
+               use_aux=FLAGS.aux,
+               gamma=FLAGS.gamma,
+               autoencoder=FLAGS.autoencoder,
+               share_embedding=FLAGS.shareembedding)
+
+    total_loss = slim.losses.get_total_loss()
+    optimizer = tf.train.AdamOptimizer(FLAGS.learningrate)
+    train_op = slim.learning.create_train_op(total_loss, optimizer)
+
+    with tf.Session() as sess:
+        sess.run(tf.initialize_all_variables())
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+        try:
+            for i in range(1000):
+                print(sess.run(train_op))
+        except Exception as e:
+            coord.request_stop(e)
+        finally:
+            coord.request_stop()
+            coord.join(threads)
+
+if __name__ == '__main__':
+    tf.app.run()
