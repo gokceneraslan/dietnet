@@ -29,7 +29,7 @@ $(OUT_GROUP): $(TEMP_GROUP)
 
 $(OUT_NPY): $(OUT_GROUP)
 	#install plinkio, numpy and pandas prior to this: pip install plinkio numpy pandas
-	python plink2numpy.py -f $(OUT) -p $(ORIG_PANEL)
+	python ../plink2numpy.py -f $(OUT) -p $(ORIG_PANEL)
 
 .PHONY: removetemp
 removetemp:
