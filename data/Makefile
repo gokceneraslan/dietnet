@@ -28,8 +28,8 @@ $(OUT_GROUP): $(TEMP_GROUP)
 	plink2 --bfile $(TEMP) --exclude $(TEMP).prune.out --threads 4 --make-bed --out $(OUT)
 
 $(OUT_NPY): $(OUT_GROUP)
-	#install plinkio prior to this: pip install plinkio
-	python convert_to_numpy.py
+	#install plinkio, numpy and pandas prior to this: pip install plinkio numpy pandas
+	python plink2numpy.py -f $(OUT) -p $(ORIG_PANEL)
 
 .PHONY: removetemp
 removetemp:
