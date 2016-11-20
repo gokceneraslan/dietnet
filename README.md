@@ -5,19 +5,21 @@ Unofficial implementation of [diet networks](http://openreview.net/forum?id=Sk-o
 ## Requirements:
 
 - Python 2.7 or 3.5
-- [TensorFlow](https://www.tensorflow.org) >= 0.11 See [installation instructions](https://www.tensorflow.org/versions/r0.11/get_started/os_setup.html#pip-installation).
+- [TensorFlow](https://www.tensorflow.org) >= 0.11. See [installation instructions](https://www.tensorflow.org/versions/r0.11/get_started/os_setup.html#pip-installation).
 - numpy
 - [plinkio](https://pypi.python.org/pypi/plinkio) (only for preprocessing) Install via pip e.g. `pip install plinkio`
 - [plink2](https://www.cog-genomics.org/plink2) (only for preprocessing) This can be easily installed via [Bioconda](http://bioconda.github.io) e.g. `conda install -c bioconda plink2`
+- [pandas](http://pandas.pydata.org/) (only for preprocessing)
 
 
 ## Usage:
 
-- Install the requirements above and run `make` command in `data` folder. (~700MB file will be downloaded)
+- Install the requirements above. Use plink2numpy to preprocess PLINK files and run dietnet script with `--prefix` option.
+- To reproduce 1000G results, run `make` command in `1000G` folder. (~700MB file will be downloaded) Then run `./dietnet --prefix 1000G/genotypes`
 - See command line arguments for available options:
 
 ```
-usage: dietnet [-h] [--datadir DATADIR] [--batchsize BATCHSIZE]
+usage: dietnet [-h] [--prefix PREFIX] [--batchsize BATCHSIZE]
                [--hiddensize HIDDENSIZE] [--embeddingsize EMBEDDINGSIZE]
                [--learningrate LEARNINGRATE] [--gamma GAMMA]
                [--numclasses NUMCLASSES] [--aux [AUX]] [--noaux]
@@ -27,7 +29,7 @@ usage: dietnet [-h] [--datadir DATADIR] [--batchsize BATCHSIZE]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --datadir DATADIR     Directory of inputs
+  --prefix PREFIX       Prefix of inputs e.g. genotypes if files are named genotypes_x.npy
   --batchsize BATCHSIZE
                         Batch size
   --hiddensize HIDDENSIZE
@@ -50,3 +52,13 @@ optional arguments:
                         Share embeddings of auxiliary nets
   --noshareembedding
 ```
+
+## TODO:
+
+- Dropout
+- Bias terms for We and Wd
+- Summary ops and tensorboard screenshots. also misclass. err and AUC
+- K-fold CV
+- Make train and predict subcommands e.g. add placeholders
+- Other embeddings: random projection, histogram
+- SNP2vec
