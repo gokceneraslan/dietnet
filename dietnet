@@ -27,8 +27,8 @@ slim = tf.contrib.slim
 
 FLAGS = tf.app.flags.FLAGS
 
-tf.app.flags.DEFINE_string('datadir', 'data',
-                                   """Directory of inputs""")
+tf.app.flags.DEFINE_string('prefix', 'genotypes',
+                                   """Prefix of inputs e.g. genotypes if files are named genotypes_x.npy""")
 tf.app.flags.DEFINE_integer('batchsize', 64,
                                     """Batch size""")
 tf.app.flags.DEFINE_integer('hiddensize', 100,
@@ -140,10 +140,10 @@ def diet(inputs, labels,
                                                                weight=gamma)
 
 
-def read_input(data_dir, batch_size, num_classes):
-    x = np.load(os.path.join(data_dir, 'genotypes_x.npy'))
-    xt = np.load(os.path.join(data_dir, 'genotypes_x_transpose.npy'))
-    y = np.load(os.path.join(data_dir, 'genotypes_y.npy'))
+def read_input(prefix, batch_size, num_classes):
+    x  = np.load(prefix + '_x.npy')
+    xt = np.load(prefix + '_x_transpose.npy')
+    y  = np.load(prefix + '_y.npy')
     x_batch, y_batch = tf.train.shuffle_batch([x, y],
                                               batch_size,
                                               enqueue_many=True,
@@ -158,7 +158,7 @@ def read_input(data_dir, batch_size, num_classes):
 
 
 def main(argv=None):
-    x, xt, y = read_input(FLAGS.datadir, FLAGS.batchsize, FLAGS.numclasses)
+    x, xt, y = read_input(FLAGS.prefix, FLAGS.batchsize, FLAGS.numclasses)
     net = diet(x, y, xt=xt,
                batch_size=FLAGS.batchsize,
                hidden_size=FLAGS.hiddensize,
