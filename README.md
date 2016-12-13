@@ -59,7 +59,7 @@ optional arguments:
 
 - Dropout
 - Bias terms for We and Wd
-- Summary ops and tensorboard screenshots. also misclass. err and AUC
+- ~~Summary ops and tensorboard screenshots. also misclass. err~~
 - K-fold CV
 - Make train and predict subcommands e.g. add placeholders
 - Other embeddings: random projection, histogram
