@@ -2,6 +2,8 @@
 
 Unofficial implementation of [diet networks](http://openreview.net/forum?id=Sk-oDY9ge) in TensorFlow.
 
+![tb](tensorboard.png)
+
 ## Requirements:
 
 - Python 2.7 or 3.5
