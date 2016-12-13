@@ -173,7 +173,12 @@ def main(argv=None):
     train_op = slim.learning.create_train_op(total_loss, optimizer)
 
     with tf.Session() as sess:
-        sess.run(tf.initialize_all_variables())
+        # TF < 0.12
+        if hasattr(tf, 'initialize_all_variables'):
+            sess.run(tf.initialize_all_variables())
+        else: # TF >= 0.12
+            sess.run(tf.global_variables_initializer())
+
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
         try:
