@@ -7,7 +7,7 @@ Unofficial implementation of [diet networks](http://openreview.net/forum?id=Sk-o
 ## Requirements:
 
 - Python 2.7 or 3.5
-- [TensorFlow](https://www.tensorflow.org) >= 0.11. See [installation instructions](https://www.tensorflow.org/versions/r0.11/get_started/os_setup.html#pip-installation).
+- [TensorFlow](https://www.tensorflow.org) >= 0.12rc0. See [installation instructions](https://www.tensorflow.org/versions/r0.11/get_started/os_setup.html#pip-installation).
 - numpy
 - [plinkio](https://pypi.python.org/pypi/plinkio) (only for preprocessing) Install via pip e.g. `pip install plinkio`
 - [plink2](https://www.cog-genomics.org/plink2) (only for preprocessing) This can be easily installed via [Bioconda](http://bioconda.github.io) e.g. `conda install -c bioconda plink2`

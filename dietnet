@@ -33,7 +33,7 @@ tf.app.flags.DEFINE_string('logdir', 'logs',
                                    """The directory where training logs are written to""")
 tf.app.flags.DEFINE_integer('batchsize', 64,
                                     """Batch size""")
-tf.app.flags.DEFINE_integer('numsteps', 10000,
+tf.app.flags.DEFINE_integer('numsteps', 1000,
                                     """The max number of gradient steps to take during training""")
 tf.app.flags.DEFINE_integer('hiddensize', 100,
                                     """Size of hidden layers""")
@@ -177,10 +177,15 @@ def main(argv=None):
     total_loss = slim.losses.get_total_loss()
     tf.summary.scalar('loss/total_loss', total_loss)
     optimizer = tf.train.AdamOptimizer(FLAGS.learningrate)
-    train_op = slim.learning.create_train_op(total_loss, optimizer)
+    train_op = slim.learning.create_train_op(total_loss, optimizer,
+                                             summarize_gradients=True,
+                                             clip_gradient_norm=10)
 
     slim.learning.train(train_op, FLAGS.logdir,
-            number_of_steps=FLAGS.numsteps)
+            number_of_steps=FLAGS.numsteps,
+            save_summaries_secs=30,  #save summaries frequently
+            save_interval_secs=900) #save model in every 15min
+
 
 if __name__ == '__main__':
     tf.app.run()
