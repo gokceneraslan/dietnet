@@ -67,10 +67,11 @@ def embedding(inputs, size, reuse=None, scope=None):
                                    size,
                                    scope=scope,
                                    reuse=reuse)
+        tf.summary.histogram('activations/auxnet/embedding', net)
     return net
 
 
-def auxnet(embedding, size, scope=None):
+def auxnet(embedding, size, scope='auxnet'):
     # MLP in auxiliary networks
     with tf.variable_scope(scope, 'AuxNet'):
         with slim.arg_scope([slim.fully_connected],
@@ -80,6 +81,7 @@ def auxnet(embedding, size, scope=None):
                           activation_fn=tf.nn.relu):
 
             net = slim.fully_connected(embedding, size, scope='fc1')
+    tf.summary.histogram('activations/auxnet/%s' % scope, net)
     return net
 
 
@@ -114,9 +116,12 @@ def diet(inputs, labels,
                                      shape=(input_size, hidden_size),
                                      initializer=tf.truncated_normal_initializer(stddev=0.01),
                                      regularizer=slim.l2_regularizer(0.0005))
+        tf.summary.histogram('activations/dietnet/We', We)
 
         output_h1 = tf.matmul(inputs, We)
         output_h1 = tf.nn.relu(output_h1)
+
+        tf.summary.histogram('activations/dietnet/output_h1', output_h1)
 
         with tf.variable_scope(scope, 'DietNet'):
             class_predictions = slim.fully_connected(output_h1, output_size,
@@ -124,6 +129,11 @@ def diet(inputs, labels,
 
         entropy_loss = slim.losses.softmax_cross_entropy(class_predictions, labels)
         tf.summary.scalar('loss/crossent_loss', entropy_loss)
+        tf.summary.scalar('accuracy',
+                slim.metrics.accuracy(
+                    slim.one_hot_encoding(tf.argmax(class_predictions, 1),
+                        output_size, on_value=1, off_value=0),
+                    tf.cast(labels, tf.int64)))
 
         if autoencoder:
             if use_aux:
@@ -138,6 +148,8 @@ def diet(inputs, labels,
                                          shape=(hidden_size, input_size),
                                          initializer=tf.truncated_normal_initializer(stddev=0.01),
                                          regularizer=slim.l2_regularizer(0.0005))
+
+            tf.summary.histogram('activations/dietnet/Wd', Wd)
 
             xhat = tf.matmul(output_h1, Wd)
             mean_squared_loss = slim.losses.mean_squared_error(xhat,
@@ -183,7 +195,7 @@ def main(argv=None):
 
     slim.learning.train(train_op, FLAGS.logdir,
             number_of_steps=FLAGS.numsteps,
-            save_summaries_secs=30,  #save summaries frequently
+            save_summaries_secs=2,  #save summaries frequently
             save_interval_secs=900) #save model in every 15min
 
 
