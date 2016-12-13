@@ -29,8 +29,12 @@ FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('prefix', 'genotypes',
                                    """Prefix of inputs e.g. genotypes if files are named genotypes_x.npy""")
+tf.app.flags.DEFINE_string('logdir', 'logs',
+                                   """The directory where training logs are written to""")
 tf.app.flags.DEFINE_integer('batchsize', 64,
                                     """Batch size""")
+tf.app.flags.DEFINE_integer('numsteps', 10000,
+                                    """The max number of gradient steps to take during training""")
 tf.app.flags.DEFINE_integer('hiddensize', 100,
                                     """Size of hidden layers""")
 tf.app.flags.DEFINE_integer('embeddingsize', 500,
@@ -119,6 +123,7 @@ def diet(inputs, labels,
                                                      activation_fn=None, scope='fc1')
 
         entropy_loss = slim.losses.softmax_cross_entropy(class_predictions, labels)
+        tf.summary.scalar('loss/crossent_loss', entropy_loss)
 
         if autoencoder:
             if use_aux:
@@ -138,6 +143,7 @@ def diet(inputs, labels,
             mean_squared_loss = slim.losses.mean_squared_error(xhat,
                                                                inputs,
                                                                weight=gamma)
+            tf.summary.scalar('loss/autoencoder_mse_loss', mean_squared_loss)
 
 
 def read_input(prefix, batch_size, num_classes):
@@ -169,26 +175,12 @@ def main(argv=None):
                share_embedding=FLAGS.shareembedding)
 
     total_loss = slim.losses.get_total_loss()
+    tf.summary.scalar('loss/total_loss', total_loss)
     optimizer = tf.train.AdamOptimizer(FLAGS.learningrate)
     train_op = slim.learning.create_train_op(total_loss, optimizer)
 
-    with tf.Session() as sess:
-        # TF < 0.12
-        if hasattr(tf, 'initialize_all_variables'):
-            sess.run(tf.initialize_all_variables())
-        else: # TF >= 0.12
-            sess.run(tf.global_variables_initializer())
-
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-        try:
-            for i in range(1000):
-                print(sess.run(train_op))
-        except Exception as e:
-            coord.request_stop(e)
-        finally:
-            coord.request_stop()
-            coord.join(threads)
+    slim.learning.train(train_op, FLAGS.logdir,
+            number_of_steps=FLAGS.numsteps)
 
 if __name__ == '__main__':
     tf.app.run()

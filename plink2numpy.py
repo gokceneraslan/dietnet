@@ -52,7 +52,7 @@ def plink2numpy(prefix, phenotype_file,
         pheno_map.to_csv('{}.phenomap'.format(prefix), sep='\t', index=False)
 
         # Save class labels
-        np.save('{}_y.npy'.format(prefix), pheno_list_cat.codes)
+        np.save('{}_y.npy'.format(prefix), pheno_list_cat.codes.astype(np.uint8))
     else:
         np.save('{}_y.npy'.format(prefix), pheno_list.as_matrix())
 
