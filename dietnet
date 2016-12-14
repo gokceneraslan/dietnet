@@ -31,9 +31,13 @@ tf.app.flags.DEFINE_string('prefix', 'genotypes',
                                    """Prefix of inputs e.g. genotypes if files are named genotypes_x.npy""")
 tf.app.flags.DEFINE_string('logdir', 'logs',
                                    """The directory where training logs are written to""")
-tf.app.flags.DEFINE_integer('batchsize', 64,
+tf.app.flags.DEFINE_integer('batchsize', 128,
                                     """Batch size""")
-tf.app.flags.DEFINE_integer('numsteps', 1000,
+tf.app.flags.DEFINE_float('dropoutrate', 0.0,
+                                    """Dropout rate""")
+tf.app.flags.DEFINE_boolean('training', True,
+                                    """Whether it is training or prediction""")
+tf.app.flags.DEFINE_integer('numsteps', 5000,
                                     """The max number of gradient steps to take during training""")
 tf.app.flags.DEFINE_integer('hiddensize', 100,
                                     """Size of hidden layers""")
@@ -55,32 +59,37 @@ tf.app.flags.DEFINE_boolean('shareembedding', True,
                                     """Share embeddings of auxiliary nets""")
 
 
-def embedding(inputs, size, reuse=None, scope=None):
+def embedding(inputs, size, dropout_rate=0.5, is_training=True, reuse=None, scope=None):
     with slim.arg_scope([slim.fully_connected],
-                      weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
-                      weights_regularizer=slim.l2_regularizer(0.0005),
-                      biases_initializer=tf.constant_initializer(0.1),
-                      activation_fn=tf.nn.relu):
+                        weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                        weights_regularizer=slim.l2_regularizer(0.005),
+                        activation_fn=tf.nn.relu):
 
         # Embedding layer, can be shared depending on the reuse parameter
         net = slim.fully_connected(inputs,
                                    size,
                                    scope=scope,
                                    reuse=reuse)
+        net = slim.dropout(net, dropout_rate,
+                is_training=is_training, scope='dropout')
         tf.summary.histogram('activations/auxnet/embedding', net)
     return net
 
 
-def auxnet(embedding, size, scope='auxnet'):
+def auxnet(embedding, size, dropout_rate=0.5, is_training=True, scope='auxnet'):
     # MLP in auxiliary networks
     with tf.variable_scope(scope, 'AuxNet'):
         with slim.arg_scope([slim.fully_connected],
-                          weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
-                          weights_regularizer=slim.l2_regularizer(0.0005),
-                          biases_initializer=tf.constant_initializer(0.1),
-                          activation_fn=tf.nn.relu):
+                weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                weights_regularizer=slim.l2_regularizer(0.005),
+                activation_fn=tf.nn.relu):
 
-            net = slim.fully_connected(embedding, size, scope='fc1')
+            net = slim.fully_connected(embedding, size, scope='hidden')
+            net = slim.dropout(net, dropout_rate,
+                    is_training=is_training, scope='dropout')
+            net = slim.fully_connected(net, size, scope='output',
+                    activation_fn=None)
+
     tf.summary.histogram('activations/auxnet/%s' % scope, net)
     return net
 
@@ -89,6 +98,8 @@ def diet(inputs, labels,
          batch_size=64,
          hidden_size=100,
          embedding_size=500,
+         dropout_rate=0.5,
+         is_training=True,
          use_aux=True,
          xt = None,
          autoencoder=True,
@@ -97,9 +108,6 @@ def diet(inputs, labels,
          scope=None):
 
     with slim.arg_scope([slim.fully_connected],
-                      weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
-                      weights_regularizer=slim.l2_regularizer(0.0005),
-                      biases_initializer=tf.constant_initializer(0.1),
                       activation_fn=tf.nn.relu):
 
         input_size = inputs.get_shape().as_list()[1]
@@ -109,39 +117,47 @@ def diet(inputs, labels,
             assert(xt is not None)
             assert(xt.get_shape()[0] == inputs.get_shape()[1])
 
-            embed = embedding(xt, embedding_size, scope='auxembed')
-            We = auxnet(embed, hidden_size, scope='aux1')
+            embed = embedding(xt, embedding_size, dropout_rate=dropout_rate,
+                              is_training=is_training, scope='auxembed')
+            We = auxnet(embed, hidden_size, dropout_rate=dropout_rate,
+                        is_training=is_training, scope='aux_We')
+
         else:
             We = slim.model_variable('We',
                                      shape=(input_size, hidden_size),
                                      initializer=tf.truncated_normal_initializer(stddev=0.01),
                                      regularizer=slim.l2_regularizer(0.0005))
-        tf.summary.histogram('activations/dietnet/We', We)
+
+        We = tf.clip_by_norm(We, clip_norm=1)
+
+        tf.summary.histogram('weights/dietnet/We', We)
 
         output_h1 = tf.matmul(inputs, We)
         output_h1 = tf.nn.relu(output_h1)
-
         tf.summary.histogram('activations/dietnet/output_h1', output_h1)
+        output_h1 = slim.dropout(output_h1, dropout_rate, is_training=is_training)
 
         with tf.variable_scope(scope, 'DietNet'):
             class_predictions = slim.fully_connected(output_h1, output_size,
-                                                     activation_fn=None, scope='fc1')
+                                                     activation_fn=None,
+                                                     scope='output')
 
         entropy_loss = slim.losses.softmax_cross_entropy(class_predictions, labels)
         tf.summary.scalar('loss/crossent_loss', entropy_loss)
         tf.summary.scalar('accuracy',
-                slim.metrics.accuracy(
-                    slim.one_hot_encoding(tf.argmax(class_predictions, 1),
-                        output_size, on_value=1, off_value=0),
-                    tf.cast(labels, tf.int64)))
+                slim.metrics.accuracy(tf.argmax(class_predictions, 1),
+                                      tf.argmax(labels, 1)))
 
         if autoencoder:
             if use_aux:
                 if share_embedding:
-                    Wd = auxnet(embed, hidden_size, scope='aux2')
+                    Wd = auxnet(embed, hidden_size, dropout_rate=dropout_rate,
+                                is_training=is_training, scope='aux_Wd')
                 else:
                     embed2 = embedding(xt, embedding_size, scope='auxembed2')
-                    Wd = auxnet(embed2, hidden_size, scope='aux2')
+                    Wd = auxnet(embed2, hidden_size,
+                            dropout_rate=dropout_rate,
+                            is_training=is_training, scope='aux_Wd')
                 Wd = tf.transpose(Wd)
             else:
                 Wd = slim.model_variable('Wd',
@@ -149,9 +165,11 @@ def diet(inputs, labels,
                                          initializer=tf.truncated_normal_initializer(stddev=0.01),
                                          regularizer=slim.l2_regularizer(0.0005))
 
-            tf.summary.histogram('activations/dietnet/Wd', Wd)
+            Wd = tf.clip_by_norm(Wd, clip_norm=1)
+            tf.summary.histogram('weights/dietnet/Wd', Wd)
 
             xhat = tf.matmul(output_h1, Wd)
+            xhat = tf.nn.relu(xhat)
             mean_squared_loss = slim.losses.mean_squared_error(xhat,
                                                                inputs,
                                                                weight=gamma)
@@ -165,8 +183,8 @@ def read_input(prefix, batch_size, num_classes):
     x_batch, y_batch = tf.train.shuffle_batch([x, y],
                                               batch_size,
                                               enqueue_many=True,
-                                              capacity=batch_size*100,
-                                              min_after_dequeue=batch_size*30)
+                                              capacity=batch_size*10,
+                                              min_after_dequeue=batch_size*5)
     y_batch = slim.one_hot_encoding(y_batch, num_classes)
     assert(x_batch.get_shape()[0] == y_batch.get_shape()[0])
 
@@ -181,6 +199,8 @@ def main(argv=None):
                batch_size=FLAGS.batchsize,
                hidden_size=FLAGS.hiddensize,
                embedding_size=FLAGS.embeddingsize,
+               dropout_rate=1-FLAGS.dropoutrate, #switch to dropout keep prob.
+               is_training=FLAGS.training,
                use_aux=FLAGS.aux,
                gamma=FLAGS.gamma,
                autoencoder=FLAGS.autoencoder,
@@ -188,7 +208,7 @@ def main(argv=None):
 
     total_loss = slim.losses.get_total_loss()
     tf.summary.scalar('loss/total_loss', total_loss)
-    optimizer = tf.train.AdamOptimizer(FLAGS.learningrate)
+    optimizer = tf.train.RMSPropOptimizer(FLAGS.learningrate)
     train_op = slim.learning.create_train_op(total_loss, optimizer,
                                              summarize_gradients=True,
                                              clip_gradient_norm=10)
