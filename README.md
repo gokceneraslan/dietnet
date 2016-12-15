@@ -57,7 +57,7 @@ optional arguments:
 
 ## TODO:
 
-- Dropout
+- ~~Dropout~~
 - Bias terms for We and Wd
 - ~~Summary ops and tensorboard screenshots. also misclass. err~~
 - K-fold CV
