@@ -62,12 +62,10 @@ def plink2numpy(prefix, phenotype_file,
     assert len(labels) == num_ind, 'Number of labels is not equal to num individuals'
 
     tf_writers = [{
-        'train': tf.python_io.TFRecordWriter('%s_fold%i_train.tfrecords' %
-            (prefix, i+1)),
-        'valid': tf.python_io.TFRecordWriter('%s_fold%i_valid.tfrecords' %
-            (prefix, i+1)),
-        'test':  tf.python_io.TFRecordWriter('%s_fold%i_test.tfrecords'  %
-            (prefix, i+1))} for i in range(nfolds)]
+        'train': tf.python_io.TFRecordWriter('%s_fold%i_train.tfrecords' % (prefix, i+1)),
+        'valid': tf.python_io.TFRecordWriter('%s_fold%i_valid.tfrecords' % (prefix, i+1)),
+        'test':  tf.python_io.TFRecordWriter('%s_fold%i_test.tfrecords'  % (prefix, i+1))}
+        for i in range(nfolds)]
     tf_writer_all = tf.python_io.TFRecordWriter('%s.tfrecords' % prefix)
 
     # Prepare indices for k-fold cv and train/valid/test split
