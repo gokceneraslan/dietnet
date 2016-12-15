@@ -25,6 +25,7 @@ import six
 import tensorflow as tf
 slim = tf.contrib.slim
 
+
 FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('prefix', 'genotypes',
@@ -212,11 +213,18 @@ def main(argv=None):
     train_op = slim.learning.create_train_op(total_loss, optimizer,
                                              summarize_gradients=True,
                                              clip_gradient_norm=10)
+    summary_ops = tf.summary.merge_all()
 
-    slim.learning.train(train_op, FLAGS.logdir,
-            number_of_steps=FLAGS.numsteps,
-            save_summaries_secs=2,  #save summaries frequently
-            save_interval_secs=900) #save model in every 15min
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        #TODO: Handle checkpoint saver/restore
+        swriter = tf.summary.FileWriter(FLAGS.logdir, sess.graph)
+
+        for step in range(FLAGS.numsteps):
+            loss, summaries = sess.run([train_op, summary_ops])
+            swriter.add_summary(summaries)
+
+        swriter.close()
 
 
 if __name__ == '__main__':
