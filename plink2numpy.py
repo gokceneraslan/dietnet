@@ -9,29 +9,22 @@ import sys, csv, argparse
 from plinkio import plinkfile #install via pip: pip install plinkio
 import numpy as np
 import pandas as pd
+import tensorflow as tf
+from sklearn.model_selection import KFold, train_test_split
 
 def plink2numpy(prefix, phenotype_file,
+                nfolds=5,
                 phenotype_idcol=0,
                 phenotype_col=1,
                 phenotype_categorical=True):
 
     # Read plink files
-    p = plinkfile.open(prefix)
-    num_snps = len(p.get_loci())
-    num_ind = len(p.get_samples())
-
-    Xt = np.zeros([num_snps, num_ind], np.int8)
-    for i, row in enumerate(p):
-        Xt[i,:] = row
-        if i % 1500 == 0:
-            print('{:.2f}% complete'.format((i/num_snps)*100))
-
-    # Save X and X^T as numpy arrays
-    np.save('{}_x_transpose.npy'.format(prefix), Xt)
-    np.save('{}_x.npy'.format(prefix), np.transpose(Xt))
+    Xt_plink = plinkfile.open(prefix)
+    num_snps = len(Xt_plink.get_loci())
+    num_ind = len(Xt_plink.get_samples())
 
     # Read sample ids from the .fam file
-    fam_ids = np.array([s.iid for s in p.get_samples()])
+    fam_ids = np.array([s.iid for s in Xt_plink.get_samples()])
     pheno = pd.read_csv(phenotype_file, sep=None, engine='python')
     assert len(fam_ids) == pheno.shape[0], "Number of records in .fam file "\
                                            "and phenotype file do not match."
@@ -51,10 +44,75 @@ def plink2numpy(prefix, phenotype_file,
 
         pheno_map.to_csv('{}.phenomap'.format(prefix), sep='\t', index=False)
 
-        # Save class labels
-        np.save('{}_y.npy'.format(prefix), pheno_list_cat.codes.astype(np.uint8))
+        labels = pheno_list_cat.codes.astype(np.uint8)
     else:
-        np.save('{}_y.npy'.format(prefix), pheno_list.as_matrix())
+        # TODO: Test that
+        labels = pheno_list.as_matrix()
+
+    # Transpose bed file to get X matrix
+    trans_filename = '%s_transpose' % prefix
+    # Produces transposed BED file
+    print('Transposing plink file...')
+    assert Xt_plink.transpose(trans_filename), 'Transpose failed'
+
+    # Open transposed file and iterate over records
+    X_plink = plinkfile.open(trans_filename)
+    int_feature = lambda v: tf.train.Int64List(value=v)
+
+    assert len(labels) == num_ind, 'Number of labels is not equal to num individuals'
+
+    tf_writers = [{
+        'train': tf.python_io.TFRecordWriter('%s_fold%i_train.tfrecords' %
+            (prefix, i+1)),
+        'valid': tf.python_io.TFRecordWriter('%s_fold%i_valid.tfrecords' %
+            (prefix, i+1)),
+        'test':  tf.python_io.TFRecordWriter('%s_fold%i_test.tfrecords'  %
+            (prefix, i+1))} for i in range(nfolds)]
+    tf_writer_all = tf.python_io.TFRecordWriter('%s.tfrecords' % prefix)
+
+    # Prepare indices for k-fold cv and train/valid/test split
+    cv_indices = []
+    for cv_trainval, cv_test in KFold(nfolds).split(range(num_ind)):
+        cv_train, cv_val = train_test_split(cv_trainval, test_size=1/(nfolds-1))
+        cv_indices.append((cv_train, cv_val, cv_test))
+
+    for i, (row, label) in enumerate(zip(X_plink, labels)): #iterates over individuals
+        example = tf.train.Example(features=tf.train.Features(feature={
+            'genotype': tf.train.Feature(int64_list=int_feature(list(row))),
+            'label':    tf.train.Feature(int64_list=int_feature([int(label)]))}))
+        for fold, (train_idx, valid_idx, test_idx) in zip(range(nfolds), cv_indices):
+            serialized_example = example.SerializeToString()
+            if i in train_idx:
+                tf_writers[fold]['train'].write(serialized_example)
+            elif i in valid_idx:
+                tf_writers[fold]['valid'].write(serialized_example)
+            elif i in test_idx:
+                tf_writers[fold]['test'].write(serialized_example)
+            else:
+                raise 'Not valid index'
+        tf_writer_all.write(serialized_example)
+
+        if i % 100 == 0:
+            print('Writing genotypes... {:.2f}% completed'.format((i/num_ind)*100), end='\r')
+            sys.stdout.flush()
+    print('Done')
+
+    for fold in range(nfolds):
+        tf_writers[fold]['train'].close()
+        tf_writers[fold]['valid'].close()
+        tf_writers[fold]['test'].close()
+    tf_writer_all.close()
+
+    Xt = np.zeros([num_snps, num_ind], np.int8)
+    for i, row in enumerate(Xt_plink): #iterates over snps
+        Xt[i,:] = row
+        if i % 1000 == 0:
+            print('Writing X transpose matrix... {:.2f}% completed'.format((i/num_snps)*100), end='\r')
+            sys.stdout.flush()
+    print('Done')
+
+    # Save X and X^T as numpy arrays
+    np.save('{}_x_transpose.npy'.format(prefix), Xt)
 
 
 if __name__ == '__main__':
@@ -64,6 +122,8 @@ if __name__ == '__main__':
                         required=True)
     parser.add_argument('-p', '--pheno', type=str,
             help='TSV/CSV formatted phenotype file', required=True)
+    parser.add_argument('-k', '--kfold', type=int, default=5,
+            help='Number of folds in cross-validation (default=5)')
     parser.add_argument('-i', '--phenoidcol', type=int,
             help='0-based column index of sample ids in phenotype file (default=0)',
             default=0)
@@ -75,6 +135,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     plink2numpy(args.prefix, args.pheno,
+            nfolds=args.kfold,
             phenotype_idcol=args.phenoidcol,
             phenotype_col=args.phenocol,
             phenotype_categorical=args.categorical)
