@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import sys, csv, argparse
+import sys, csv, argparse, glob, json
 
 from plinkio import plinkfile #install via pip: pip install plinkio
 import numpy as np
@@ -12,16 +12,24 @@ import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import KFold, train_test_split
 
-def plink2numpy(prefix, phenotype_file,
-                nfolds=5,
-                phenotype_idcol=0,
-                phenotype_col=1,
-                phenotype_categorical=True):
+_int_feature = lambda v: tf.train.Int64List(value=v)
+
+def write_records(prefix, phenotype_file,
+                  nfolds=5,
+                  phenotype_idcol=0,
+                  phenotype_col=1,
+                  phenotype_categorical=True):
 
     # Read plink files
     Xt_plink = plinkfile.open(prefix)
     num_snps = len(Xt_plink.get_loci())
     num_ind = len(Xt_plink.get_samples())
+
+    with open('%s.dietmetadata' % prefix, 'w') as f:
+        json.dump({'num_snp': num_snps,
+                   'num_ind': num_ind,
+                   'phenotype_categorical': phenotype_categorical,
+                   'nfolds': nfolds}, f)
 
     # Read sample ids from the .fam file
     fam_ids = np.array([s.iid for s in Xt_plink.get_samples()])
@@ -57,7 +65,6 @@ def plink2numpy(prefix, phenotype_file,
 
     # Open transposed file and iterate over records
     X_plink = plinkfile.open(trans_filename)
-    int_feature = lambda v: tf.train.Int64List(value=v)
 
     assert len(labels) == num_ind, 'Number of labels is not equal to num individuals'
 
@@ -76,8 +83,9 @@ def plink2numpy(prefix, phenotype_file,
 
     for i, (row, label) in enumerate(zip(X_plink, labels)): #iterates over individuals
         example = tf.train.Example(features=tf.train.Features(feature={
-            'genotype': tf.train.Feature(int64_list=int_feature(list(row))),
-            'label':    tf.train.Feature(int64_list=int_feature([int(label)]))}))
+            'genotype': tf.train.Feature(int64_list=_int_feature(list(row))),
+            'label':    tf.train.Feature(int64_list=_int_feature([int(label)]))}))
+
         for fold, (train_idx, valid_idx, test_idx) in zip(range(nfolds), cv_indices):
             serialized_example = example.SerializeToString()
             if i in train_idx:
@@ -113,6 +121,40 @@ def plink2numpy(prefix, phenotype_file,
     np.save('{}_x_transpose.npy'.format(prefix), Xt)
 
 
+def get_fold_files(prefix):
+    meta = json.load(open('%s.dietmetadata' % prefix))
+    nfolds = int(meta['nfolds'])
+    pattern = '%s_fold%i_%s.tfrecords'
+    fold_files = {
+            'train': [pattern % (prefix, i+1, 'train') for i in range(nfolds)],
+            'valid': [pattern % (prefix, i+1, 'valid') for i in range(nfolds)],
+            'test':  [pattern % (prefix, i+1, 'test')  for i in range(nfolds)]}
+
+    return fold_files
+
+
+def read_input(prefix, filename, batch_size):
+    meta = json.load(open('%s.dietmetadata' % prefix))
+    num_snps = int(meta['num_snp'])
+
+    reader = tf.TFRecordReader()
+    filename_queue = tf.train.string_input_producer([filename])
+
+    _, serialized_example = reader.read(filename_queue)
+    features = tf.parse_single_example(
+        serialized_example,
+        features={
+            'genotype': tf.FixedLenFeature([num_snps], tf.int64),
+            'label':    tf.FixedLenFeature([1], tf.int64)
+        })
+
+    outputs = tf.train.batch(features,
+                             batch_size=batch_size,
+                             capacity=batch_size*50)
+
+    return outputs
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert plink files to '
                                                   'numpy arrays.')
@@ -132,7 +174,7 @@ if __name__ == '__main__':
             help='Phenotype is categorical (default=True)', default=True)
 
     args = parser.parse_args()
-    plink2numpy(args.prefix, args.pheno,
+    write_records(args.prefix, args.pheno,
             nfolds=args.kfold,
             phenotype_idcol=args.phenoidcol,
             phenotype_col=args.phenocol,
