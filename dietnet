@@ -133,7 +133,7 @@ def diet(inputs, labels,
         tf.summary.histogram('weights/dietnet/We', We)
 
         output_h1 = tf.matmul(inputs, We)
-        output_h1 = tf.nn.relu(output_h1)
+        output_h1 = slim.bias_add(output_h1, activation_fn=tf.nn.relu)
         tf.summary.histogram('activations/dietnet/output_h1', output_h1)
         output_h1 = slim.dropout(output_h1, dropout_rate, is_training=is_training)
 
@@ -169,7 +169,7 @@ def diet(inputs, labels,
             tf.summary.histogram('weights/dietnet/Wd', Wd)
 
             xhat = tf.matmul(output_h1, Wd)
-            xhat = tf.nn.relu(xhat)
+            xhat = slim.bias_add(xhat, activation_fn=tf.nn.relu)
             mean_squared_loss = slim.losses.mean_squared_error(xhat,
                                                                inputs,
                                                                weight=gamma)
