@@ -25,6 +25,8 @@ import six
 import tensorflow as tf
 slim = tf.contrib.slim
 
+from . import io
+
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -177,15 +179,9 @@ def diet(inputs, labels,
             tf.summary.scalar('loss/autoencoder_mse_loss', mean_squared_loss)
 
 
-def read_input(prefix, batch_size, num_classes):
-    x  = np.load(prefix + '_x.npy')
+def read_input(prefix, batch_size, num_classes, filename):
     xt = np.load(prefix + '_x_transpose.npy')
-    y  = np.load(prefix + '_y.npy')
-    x_batch, y_batch = tf.train.shuffle_batch([x, y],
-                                              batch_size,
-                                              enqueue_many=True,
-                                              capacity=batch_size*10,
-                                              min_after_dequeue=batch_size*5)
+    x_batch, y_batch = io.read_input(prefix, filename, batch_size )
     y_batch = slim.one_hot_encoding(y_batch, num_classes)
     assert(x_batch.get_shape()[0] == y_batch.get_shape()[0])
 

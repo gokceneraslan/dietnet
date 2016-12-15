@@ -152,7 +152,7 @@ def read_input(prefix, filename, batch_size):
                              batch_size=batch_size,
                              capacity=batch_size*50)
 
-    return outputs
+    return outputs['genotype'][0], outputs['label'][0][0]
 
 
 if __name__ == '__main__':
