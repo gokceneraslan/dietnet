@@ -101,7 +101,7 @@ def write_records(prefix, phenotype_file,
         if i % 100 == 0:
             print('Writing genotypes... {:.2f}% completed'.format((i/num_ind)*100), end='\r')
             sys.stdout.flush()
-    print('Done')
+    print('\nDone')
 
     for fold in range(nfolds):
         tf_writers[fold]['train'].close()
@@ -115,9 +115,9 @@ def write_records(prefix, phenotype_file,
         if i % 1000 == 0:
             print('Writing X transpose matrix... {:.2f}% completed'.format((i/num_snps)*100), end='\r')
             sys.stdout.flush()
-    print('Done')
+    print('\nDone')
 
-    # Save X and X^T as numpy arrays
+    # Save X^T as numpy arrays
     np.save('{}_x_transpose.npy'.format(prefix), Xt)
 
 
