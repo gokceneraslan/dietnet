@@ -155,25 +155,7 @@ def read_input(prefix, filename, batch_size):
     return tf.squeeze(outputs['genotype']), tf.squeeze(outputs['label'])
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Convert plink files to '
-                                                  'numpy arrays.')
-    parser.add_argument('-f', '--prefix', type=str, help='PLINK prefix',
-                        required=True)
-    parser.add_argument('-p', '--pheno', type=str,
-            help='TSV/CSV formatted phenotype file', required=True)
-    parser.add_argument('-k', '--kfold', type=int, default=5,
-            help='Number of folds in cross-validation (default=5)')
-    parser.add_argument('-i', '--phenoidcol', type=int,
-            help='0-based column index of sample ids in phenotype file (default=0)',
-            default=0)
-    parser.add_argument('-j', '--phenocol', type=int,
-            help='0-based column index of phenotypes in phenotype file (default=1)',
-            default=1)
-    parser.add_argument('-c', '--categorical', type=bool,
-            help='Phenotype is categorical (default=True)', default=True)
-
-    args = parser.parse_args()
+def run_args(args):
     write_records(args.prefix, args.pheno,
             nfolds=args.kfold,
             phenotype_idcol=args.phenoidcol,

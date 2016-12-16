@@ -26,157 +26,71 @@ import tensorflow as tf
 slim = tf.contrib.slim
 
 from . import io
+from .network import embedding, auxnet, diet
 
 
-FLAGS = tf.app.flags.FLAGS
+def parse_args(args):
+    parser = argparse.ArgumentParser(description='Diet network')
+    subparsers = parser.add_subparsers(help='sub-command help')
 
-tf.app.flags.DEFINE_string('prefix', 'genotypes',
-                                   """Prefix of inputs e.g. genotypes if files are named genotypes_x.npy""")
-tf.app.flags.DEFINE_string('logdir', 'logs',
-                                   """The directory where training logs are written to""")
-tf.app.flags.DEFINE_integer('batchsize', 128,
-                                    """Batch size""")
-tf.app.flags.DEFINE_float('dropoutrate', 0.0,
-                                    """Dropout rate""")
-tf.app.flags.DEFINE_boolean('training', True,
-                                    """Whether it is training or prediction""")
-tf.app.flags.DEFINE_integer('numsteps', 5000,
-                                    """The max number of gradient steps to take during training""")
-tf.app.flags.DEFINE_integer('hiddensize', 100,
-                                    """Size of hidden layers""")
-tf.app.flags.DEFINE_integer('embeddingsize', 500,
-                                    """Size of embedding layers""")
-tf.app.flags.DEFINE_float('learningrate', 1e-4,
-                                    """Learning rate""")
-tf.app.flags.DEFINE_float('gamma', 1,
-                                    """Loss weight of autoencoder""")
-tf.app.flags.DEFINE_integer('numclasses', 26,
-                                    """Total number of classes""")
-tf.app.flags.DEFINE_boolean('aux', True,
-                                    """Use auxiliary networks to reduce number of parameters.""")
-tf.app.flags.DEFINE_boolean('autoencoder', True,
-                                    """Enable autoencoder""")
-tf.app.flags.DEFINE_string('embeddingtype', 'rawend2end',
-                                    """Type of embedding: Only raw_end2end supported.""")
-tf.app.flags.DEFINE_boolean('shareembedding', True,
-                                    """Share embeddings of auxiliary nets""")
+    # Preprocess subparser
+    parser_preprocess = subparsers.add_parser('preprocess', help='preprocess help')
+    parser_preprocess.set_defaults(func=preprocess)
 
+    parser_preprocess.add_argument('-f', '--prefix', type=str, help='PLINK prefix',
+            required=True)
+    parser_preprocess.add_argument('-p', '--pheno', type=str,
+            help='TSV/CSV formatted phenotype file', required=True)
+    parser_preprocess.add_argument('-k', '--kfold', type=int, default=5,
+            help='Number of folds in cross-validation (default=5)')
+    parser_preprocess.add_argument('-i', '--phenoidcol', type=int,
+            help='0-based column index of sample ids in phenotype file (default=0)',
+            default=0)
+    parser_preprocess.add_argument('-j', '--phenocol', type=int,
+            help='0-based column index of phenotypes in phenotype file (default=1)',
+            default=1)
+    parser_preprocess.add_argument('-c', '--categorical', type=bool,
+            help='Phenotype is categorical (default=True)', default=True)
 
-def embedding(inputs, size, dropout_rate=0.5, is_training=True, reuse=None, scope=None):
-    with slim.arg_scope([slim.fully_connected],
-                        weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
-                        weights_regularizer=slim.l2_regularizer(0.005),
-                        activation_fn=tf.nn.relu):
+    # train subparser
+    parser_train = subparsers.add_parser('train', help='train help')
+    parser_train.set_defaults(func=train)
 
-        # Embedding layer, can be shared depending on the reuse parameter
-        net = slim.fully_connected(inputs,
-                                   size,
-                                   scope=scope,
-                                   reuse=reuse)
-        net = slim.dropout(net, dropout_rate,
-                is_training=is_training, scope='dropout')
-        tf.summary.histogram('activations/auxnet/embedding', net)
-    return net
+    parser_train.add_argument('-f', '--prefix', type=str, default='genotypes',
+            help="Prefix of inputs e.g. genotypes if files "
+            "are named genotypes_x.npy")
+    parser_train.add_argument('-d', '--logdir', type=str, default='logs',
+            help="The directory where training logs are written to")
+    parser_train.add_argument('-b', '--batchsize', type=int, default=128,
+            help="Batch size")
+    parser_train.add_argument('--dropoutrate', type=float, default=0.0,
+            help="Dropout rate")
+    parser_train.add_argument('--numsteps', type=int, default=5000,
+            help="The max number of gradient steps to take during training")
+    parser_train.add_argument('--hiddensize', type=int, default=100,
+            help="Size of hidden layers")
+    parser_train.add_argument('--embeddingsize', type=int, default=100,
+            help="Size of embedding layers")
+    parser_train.add_argument('-l', '--learningrate', type=float, defaul=1e-4,
+            help="Learning rate")
+    parser_train.add_argument('--gamma', type=float, default=1,
+            help="Loss weight of autoencoder")
+    parser_train.add_argument('-c', '--numclasses', type=int, required=True,
+            help="Total number of classes")
+    parser_train.add_argument('--aux', action='store_true',
+            help="Use auxiliary networks to reduce number of parameters.")
+    parser_train.add_argument('--autoencoder', action='store_true',
+            help="Enable autoencoder")
+    parser_train.add_argument('embeddingtype', choices=['rawend2end'],
+            help="Type of embedding: Only raw_end2end supported.")
+    parser_train.add_argument('--shareembedding', action='store_true',
+            help="Share embeddings of auxiliary nets")
 
-
-def auxnet(embedding, size, dropout_rate=0.5, is_training=True, scope='auxnet'):
-    # MLP in auxiliary networks
-    with tf.variable_scope(scope, 'AuxNet'):
-        with slim.arg_scope([slim.fully_connected],
-                weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
-                weights_regularizer=slim.l2_regularizer(0.005),
-                activation_fn=tf.nn.relu):
-
-            net = slim.fully_connected(embedding, size, scope='hidden')
-            net = slim.dropout(net, dropout_rate,
-                    is_training=is_training, scope='dropout')
-            net = slim.fully_connected(net, size, scope='output',
-                    activation_fn=None)
-
-    tf.summary.histogram('activations/auxnet/%s' % scope, net)
-    return net
+    return parser.parse_args(args)
 
 
-def diet(inputs, labels,
-         batch_size=64,
-         hidden_size=100,
-         embedding_size=500,
-         dropout_rate=0.5,
-         is_training=True,
-         use_aux=True,
-         xt = None,
-         autoencoder=True,
-         gamma=1,
-         share_embedding=True,
-         scope=None):
-
-    with slim.arg_scope([slim.fully_connected],
-                      activation_fn=tf.nn.relu):
-
-        input_size = inputs.get_shape().as_list()[1]
-        output_size = labels.get_shape().as_list()[1]
-
-        if use_aux:
-            assert(xt is not None)
-            assert(xt.get_shape()[0] == inputs.get_shape()[1])
-
-            embed = embedding(xt, embedding_size, dropout_rate=dropout_rate,
-                              is_training=is_training, scope='auxembed')
-            We = auxnet(embed, hidden_size, dropout_rate=dropout_rate,
-                        is_training=is_training, scope='aux_We')
-
-        else:
-            We = slim.model_variable('We',
-                                     shape=(input_size, hidden_size),
-                                     initializer=tf.truncated_normal_initializer(stddev=0.01),
-                                     regularizer=slim.l2_regularizer(0.0005))
-
-        We = tf.clip_by_norm(We, clip_norm=1)
-
-        tf.summary.histogram('weights/dietnet/We', We)
-
-        output_h1 = tf.matmul(inputs, We)
-        output_h1 = slim.bias_add(output_h1, activation_fn=tf.nn.relu)
-        tf.summary.histogram('activations/dietnet/output_h1', output_h1)
-        output_h1 = slim.dropout(output_h1, dropout_rate, is_training=is_training)
-
-        with tf.variable_scope(scope, 'DietNet'):
-            class_predictions = slim.fully_connected(output_h1, output_size,
-                                                     activation_fn=None,
-                                                     scope='output')
-
-        entropy_loss = slim.losses.softmax_cross_entropy(class_predictions, labels)
-        tf.summary.scalar('loss/crossent_loss', entropy_loss)
-        tf.summary.scalar('accuracy',
-                slim.metrics.accuracy(tf.argmax(class_predictions, 1),
-                                      tf.argmax(labels, 1)))
-
-        if autoencoder:
-            if use_aux:
-                if share_embedding:
-                    Wd = auxnet(embed, hidden_size, dropout_rate=dropout_rate,
-                                is_training=is_training, scope='aux_Wd')
-                else:
-                    embed2 = embedding(xt, embedding_size, scope='auxembed2')
-                    Wd = auxnet(embed2, hidden_size,
-                            dropout_rate=dropout_rate,
-                            is_training=is_training, scope='aux_Wd')
-                Wd = tf.transpose(Wd)
-            else:
-                Wd = slim.model_variable('Wd',
-                                         shape=(hidden_size, input_size),
-                                         initializer=tf.truncated_normal_initializer(stddev=0.01),
-                                         regularizer=slim.l2_regularizer(0.0005))
-
-            Wd = tf.clip_by_norm(Wd, clip_norm=1)
-            tf.summary.histogram('weights/dietnet/Wd', Wd)
-
-            xhat = tf.matmul(output_h1, Wd)
-            xhat = slim.bias_add(xhat, activation_fn=tf.nn.relu)
-            mean_squared_loss = slim.losses.mean_squared_error(xhat,
-                                                               inputs,
-                                                               weight=gamma)
-            tf.summary.scalar('loss/autoencoder_mse_loss', mean_squared_loss)
+def preprocess(args):
+    io.run_args(args)
 
 
 def read_input(prefix, batch_size, num_classes, filename):
@@ -190,22 +104,22 @@ def read_input(prefix, batch_size, num_classes, filename):
             tf.cast(y_batch, tf.float32))
 
 
-def main(argv=None):
-    x, xt, y = read_input(FLAGS.prefix, FLAGS.batchsize, FLAGS.numclasses)
+def train(args):
+    x, xt, y = read_input(args.prefix, args.batchsize, args.numclasses)
     net = diet(x, y, xt=xt,
-               batch_size=FLAGS.batchsize,
-               hidden_size=FLAGS.hiddensize,
-               embedding_size=FLAGS.embeddingsize,
-               dropout_rate=1-FLAGS.dropoutrate, #switch to dropout keep prob.
-               is_training=FLAGS.training,
-               use_aux=FLAGS.aux,
-               gamma=FLAGS.gamma,
-               autoencoder=FLAGS.autoencoder,
-               share_embedding=FLAGS.shareembedding)
+               batch_size=args.batchsize,
+               hidden_size=args.hiddensize,
+               embedding_size=args.embeddingsize,
+               dropout_rate=1-args.dropoutrate, #switch to dropout keep prob.
+               is_training=args.training,
+               use_aux=args.aux,
+               gamma=args.gamma,
+               autoencoder=args.autoencoder,
+               share_embedding=args.shareembedding)
 
     total_loss = slim.losses.get_total_loss()
     tf.summary.scalar('loss/total_loss', total_loss)
-    optimizer = tf.train.RMSPropOptimizer(FLAGS.learningrate)
+    optimizer = tf.train.RMSPropOptimizer(args.learningrate)
     train_op = slim.learning.create_train_op(total_loss, optimizer,
                                              summarize_gradients=True,
                                              clip_gradient_norm=10)
@@ -215,9 +129,9 @@ def main(argv=None):
         sess.run(tf.global_variables_initializer())
         tf.train.start_queue_runners()
         #TODO: Handle checkpoint saver/restore
-        swriter = tf.summary.FileWriter(FLAGS.logdir, sess.graph)
+        swriter = tf.summary.FileWriter(args.logdir, sess.graph)
 
-        for step in range(FLAGS.numsteps):
+        for step in range(args.numsteps):
             loss, summaries = sess.run([train_op, summary_ops])
             swriter.add_summary(summaries)
 
@@ -225,4 +139,5 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-    tf.app.run()
+    args = parse_args(sys.argv)
+    args.func(args)
