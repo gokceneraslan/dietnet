@@ -213,6 +213,7 @@ def main(argv=None):
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
+        tf.train.start_queue_runners()
         #TODO: Handle checkpoint saver/restore
         swriter = tf.summary.FileWriter(FLAGS.logdir, sess.graph)
 

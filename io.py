@@ -152,7 +152,7 @@ def read_input(prefix, filename, batch_size):
                              batch_size=batch_size,
                              capacity=batch_size*50)
 
-    return outputs['genotype'][0], outputs['label'][0][0]
+    return tf.squeeze(outputs['genotype']), tf.squeeze(outputs['label'])
 
 
 if __name__ == '__main__':
