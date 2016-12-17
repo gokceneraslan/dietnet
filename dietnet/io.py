@@ -155,7 +155,7 @@ def read_input(prefix, filename, batch_size):
     return tf.squeeze(outputs['genotype']), tf.squeeze(outputs['label'])
 
 
-def run_args(args):
+def preprocess(args):
     write_records(args.prefix, args.pheno,
             nfolds=args.kfold,
             phenotype_idcol=args.phenoidcol,
