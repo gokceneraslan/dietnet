@@ -19,7 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
+import os, sys, argparse
 import numpy as np
 import six
 import tensorflow as tf
@@ -29,12 +29,15 @@ from . import io
 from .network import embedding, auxnet, diet
 
 
-def parse_args(args):
+def parse_args():
     parser = argparse.ArgumentParser(description='Diet network')
-    subparsers = parser.add_subparsers(help='sub-command help')
+    subparsers = parser.add_subparsers(title='subcommands',
+            help='sub-command help', description='valid subcommands', dest='cmd')
+    subparsers.required = True
 
     # Preprocess subparser
-    parser_preprocess = subparsers.add_parser('preprocess', help='preprocess help')
+    parser_preprocess = subparsers.add_parser('preprocess',
+            help='Convert plink format to required TFRecords and split CV folds')
     parser_preprocess.set_defaults(func=preprocess)
 
     parser_preprocess.add_argument('-f', '--prefix', type=str, help='PLINK prefix',
@@ -53,7 +56,8 @@ def parse_args(args):
             help='Phenotype is categorical (default=True)', default=True)
 
     # train subparser
-    parser_train = subparsers.add_parser('train', help='train help')
+    parser_train = subparsers.add_parser('train',
+            help='Start training using given training set.')
     parser_train.set_defaults(func=train)
 
     parser_train.add_argument('-f', '--prefix', type=str, default='genotypes',
@@ -71,7 +75,7 @@ def parse_args(args):
             help="Size of hidden layers")
     parser_train.add_argument('--embeddingsize', type=int, default=100,
             help="Size of embedding layers")
-    parser_train.add_argument('-l', '--learningrate', type=float, defaul=1e-4,
+    parser_train.add_argument('-l', '--learningrate', type=float, default=1e-4,
             help="Learning rate")
     parser_train.add_argument('--gamma', type=float, default=1,
             help="Loss weight of autoencoder")
@@ -86,7 +90,7 @@ def parse_args(args):
     parser_train.add_argument('--shareembedding', action='store_true',
             help="Share embeddings of auxiliary nets")
 
-    return parser.parse_args(args)
+    return parser.parse_args()
 
 
 def preprocess(args):
@@ -138,6 +142,6 @@ def train(args):
         swriter.close()
 
 
-if __name__ == '__main__':
-    args = parse_args(sys.argv)
+def main():
+    args = parse_args()
     args.func(args)
