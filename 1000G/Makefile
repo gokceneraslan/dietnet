@@ -28,8 +28,8 @@ $(OUT_GROUP): $(TEMP_GROUP)
 	plink2 --bfile $(TEMP) --exclude $(TEMP).prune.out --threads 4 --make-bed --out $(OUT)
 
 $(OUT_NPY): $(OUT_GROUP)
-	#install plinkio, numpy and pandas prior to this: pip install plinkio numpy pandas
-	python ../plink2numpy.py -f $(OUT) -p $(ORIG_PANEL) -k 5
+	#install dietnet first
+	dietnet preprocess $(OUT) -p $(ORIG_PANEL) -k 5
 
 .PHONY: removetemp
 removetemp:

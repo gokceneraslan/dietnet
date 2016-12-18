@@ -37,8 +37,7 @@ def parse_args():
             help='Convert plink format to required TFRecords and split CV folds')
     parser_preprocess.set_defaults(func=io.preprocess)
 
-    parser_preprocess.add_argument('-f', '--prefix', type=str, help='PLINK prefix',
-            required=True)
+    parser_preprocess.add_argument('prefix', type=str, help='PLINK prefix')
     parser_preprocess.add_argument('-p', '--pheno', type=str,
             help='TSV/CSV formatted phenotype file', required=True)
     parser_preprocess.add_argument('-k', '--kfold', type=int, default=5,
@@ -57,22 +56,25 @@ def parse_args():
             help='Start training using given training set.')
     parser_train.set_defaults(func=train.train)
 
-    parser_train.add_argument('-f', '--prefix', type=str, required=True,
+    parser_train.add_argument('prefix', type=str,
             help="Prefix of inputs e.g. genotypes if files "
             "are named genotypes.tfrecords")
-    parser_train.add_argument('-d', '--logdir', type=str, default='logs',
+    parser_train.add_argument('-l', '--logdir', type=str, default='logs',
             help="The directory where training logs are written to")
     parser_train.add_argument('-b', '--batchsize', type=int, default=128,
             help="Batch size")
+    parser_train.add_argument('--fold', type=int, default=None,
+            help="Fold to use in the training (default=all)")
     parser_train.add_argument('--dropoutrate', type=float, default=0.0,
             help="Dropout rate")
-    parser_train.add_argument('--numsteps', type=int, default=5000,
-            help="The max number of gradient steps to take during training")
+    parser_train.add_argument('--earlystop', type=int, default=100,
+            help="Max number of epochs to continue training in case of no "
+                 "improvement on validation loss")
     parser_train.add_argument('--hiddensize', type=int, default=100,
             help="Size of hidden layers")
     parser_train.add_argument('--embeddingsize', type=int, default=100,
             help="Size of embedding layers")
-    parser_train.add_argument('-l', '--learningrate', type=float, default=1e-4,
+    parser_train.add_argument('--learningrate', type=float, default=1e-4,
             help="Learning rate")
     parser_train.add_argument('--gamma', type=float, default=1,
             help="Loss weight of autoencoder")
