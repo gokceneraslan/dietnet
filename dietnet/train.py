@@ -18,36 +18,25 @@ from __future__ import division
 from __future__ import print_function
 
 from .network import embedding, auxnet, diet
-
-
-def read_input(prefix, batch_size, num_classes, filename):
-    xt = np.load(prefix + '_x_transpose.npy')
-    x_batch, y_batch = io.read_input(prefix, filename, batch_size )
-    y_batch = slim.one_hot_encoding(y_batch, num_classes)
-    assert(x_batch.get_shape()[0] == y_batch.get_shape()[0])
-
-    return (tf.cast(x_batch, tf.float32),
-            tf.convert_to_tensor(xt, tf.float32),
-            tf.cast(y_batch, tf.float32))
+from . import io
 
 
 def train(args):
+    meta = io.read_metadata(args.prefix)
     x, xt, y = read_input(args.prefix, args.batchsize, args.numclasses)
-    net = diet(x, y, xt=xt,
+    loss = diet(input_size, output_size,
                batch_size=args.batchsize,
                hidden_size=args.hiddensize,
                embedding_size=args.embeddingsize,
                dropout_rate=1-args.dropoutrate, #switch to dropout keep prob.
-               is_training=args.training,
+               is_training=True,
                use_aux=args.aux,
                gamma=args.gamma,
                autoencoder=args.autoencoder,
                share_embedding=args.shareembedding)
 
-    total_loss = slim.losses.get_total_loss()
-    tf.summary.scalar('loss/total_loss', total_loss)
     optimizer = tf.train.RMSPropOptimizer(args.learningrate)
-    train_op = slim.learning.create_train_op(total_loss, optimizer,
+    train_op = slim.learning.create_train_op(loss, optimizer,
                                              summarize_gradients=True,
                                              clip_gradient_norm=10)
     summary_ops = tf.summary.merge_all()
