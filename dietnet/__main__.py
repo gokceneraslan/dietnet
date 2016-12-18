@@ -72,6 +72,8 @@ def parse_args():
     parser_train.add_argument('--earlystop', type=int, default=100,
             help="Max number of epochs to continue training in case of no "
                  "improvement on validation loss")
+    parser_train.add_argument('--checkpoint_every', type=int, default=100,
+            help="How many batches to save checkpoints after")
     parser_train.add_argument('--hiddensize', type=int, default=100,
             help="Size of hidden layers")
     parser_train.add_argument('--embeddingsize', type=int, default=100,
