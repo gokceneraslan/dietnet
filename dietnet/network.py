@@ -49,14 +49,13 @@ def auxnet(embedding, size, dropout_rate=0.5, is_training=True, scope='auxnet'):
     return net
 
 
-def diet(inputs, labels,
+def diet(input_size, output_size,
          batch_size=64,
          hidden_size=100,
-         embedding_size=500,
+         embedding_size=100,
          dropout_rate=0.5,
          is_training=True,
          use_aux=True,
-         xt = None,
          autoencoder=True,
          gamma=1,
          share_embedding=True,
@@ -65,13 +64,11 @@ def diet(inputs, labels,
     with slim.arg_scope([slim.fully_connected],
                       activation_fn=tf.nn.relu):
 
-        input_size = inputs.get_shape().as_list()[1]
-        output_size = labels.get_shape().as_list()[1]
+        inputs = tf.placeholder(tf.float32, [None, input_size], name='inputs')
+        outputs = tf.placeholder(tf.float32, [None, output_size], name='outputs')
+        xt = tf.placeholder(tf.float32, [input_size, None], name='xt')
 
         if use_aux:
-            assert(xt is not None)
-            assert(xt.get_shape()[0] == inputs.get_shape()[1])
-
             embed = embedding(xt, embedding_size, dropout_rate=dropout_rate,
                               is_training=is_training, scope='auxembed')
             We = auxnet(embed, hidden_size, dropout_rate=dropout_rate,
@@ -129,4 +126,9 @@ def diet(inputs, labels,
                                                                inputs,
                                                                weight=gamma)
             tf.summary.scalar('loss/autoencoder_mse_loss', mean_squared_loss)
+
+    total_loss = slim.losses.get_total_loss()
+    tf.summary.scalar('loss/total_loss', total_loss)
+
+    return total_loss
 
