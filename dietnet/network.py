@@ -53,7 +53,7 @@ def auxnet(embedding, size, dropout_rate=0.5, is_training=True, scope='auxnet'):
     return net
 
 
-def diet(input_size, output_size,
+def diet(inputs, outputs, xt,
          batch_size=64,
          hidden_size=100,
          embedding_size=100,
@@ -68,9 +68,14 @@ def diet(input_size, output_size,
     with slim.arg_scope([slim.fully_connected],
                       activation_fn=tf.nn.relu):
 
-        inputs = tf.placeholder(tf.float32, [None, input_size], name='inputs')
-        outputs = tf.placeholder(tf.float32, [None, output_size], name='outputs')
-        xt = tf.placeholder(tf.float32, [input_size, None], name='xt')
+        input_size = inputs.get_shape().as_list()[1]
+        output_size = outputs.get_shape().as_list()[1]
+
+        # use placeholder_with_default hack to be able to run valid set
+        # see: https://github.com/tensorflow/tensorflow/issues/2514
+        inputs  = tf.placeholder_with_default(inputs,  [None,  input_size], name='inputs')
+        outputs = tf.placeholder_with_default(outputs, [None, output_size], name='outputs')
+        xt      = tf.placeholder_with_default(xt,      [input_size,  None], name='xt')
 
         if use_aux:
             embed = embedding(xt, embedding_size, dropout_rate=dropout_rate,

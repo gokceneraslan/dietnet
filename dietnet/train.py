@@ -34,24 +34,24 @@ def train(args):
                                     sets=('train', 'valid'))
     x_t = io.read_transpose(args.prefix)
 
-    loss = diet(meta['num_snp'], meta['num_class'],
-                batch_size=args.batchsize,
-                hidden_size=args.hiddensize,
-                embedding_size=args.embeddingsize,
-                dropout_rate=1-args.dropoutrate, #switch to dropout keep prob.
-                is_training=True,
-                use_aux=args.useaux,
-                gamma=args.gamma,
-                autoencoder=args.autoencoder,
-                share_embedding=args.shareembedding)
-
-    optimizer = tf.train.RMSPropOptimizer(args.learningrate)
-    train_op = slim.learning.create_train_op(loss, optimizer,
-                                             summarize_gradients=True,
-                                             clip_gradient_norm=10)
-    summary_ops = tf.summary.merge_all()
-
     for fold_i, (train, valid) in enumerate(folds):
+        loss = diet(train['genotype'], train['label'], x_t,
+                    batch_size=args.batchsize,
+                    hidden_size=args.hiddensize,
+                    embedding_size=args.embeddingsize,
+                    dropout_rate=1-args.dropoutrate, #switch to dropout keep prob.
+                    is_training=True,
+                    use_aux=args.useaux,
+                    gamma=args.gamma,
+                    autoencoder=args.autoencoder,
+                    share_embedding=args.shareembedding)
+
+        optimizer = tf.train.RMSPropOptimizer(args.learningrate)
+        train_op = slim.learning.create_train_op(loss, optimizer,
+                                                 summarize_gradients=True,
+                                                 clip_gradient_norm=10)
+        summary_ops = tf.summary.merge_all()
+
         # Create coordinator
         coord = tf.train.Coordinator()
         fold_logdir = '%s/fold%s' % (args.logdir, fold_i)
@@ -69,15 +69,16 @@ def train(args):
             try:
                 while True:
                     start_time = time.time()
-                    loss, summaries = sess.run([train_op, summary_ops],
-                                               feed_dict={'inputs': train['genotype'],
-                                                          'outputs': train['label'],
-                                                          'xt': x_t})
+                    trainloss, summaries = sess.run([train_op, summary_ops])
                     swriter.add_summary(summaries)
 
+                    valloss = sess.run(loss,
+                            feed_dict={'inputs:0': valid['genotype'].eval(),
+                                       'outputs:0': valid['label'].eval()})
+
                     duration = time.time() - start_time
-                    print('step {:d} - loss = {:.3f}, ({:.3f} sec/step)'
-                          .format(step, loss, duration))
+                    print('step {:d} - loss = {:.3f} vallos = {:.3f}, ({:.3f} sec/step)'
+                          .format(step, trainloss, valloss, duration))
 
                     if step % args.checkpoint_every == 0:
                         saver.save(sess, fold_logdir, global_step=step)
@@ -87,6 +88,7 @@ def train(args):
 
             except KeyboardInterrupt as e:
                 coord.request_stop()
+                break
             finally:
                 coord.request_stop()
                 coord.join(threads)
