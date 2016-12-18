@@ -50,6 +50,8 @@ def parse_args():
             default=1)
     parser_preprocess.add_argument('-c', '--categorical', type=bool,
             help='Phenotype is categorical (default=True)', default=True)
+    parser_preprocess.add_argument('-s', '--numclasses', type=int, default=None,
+            help="Total number of classes (auto by default)")
 
     # train subparser
     parser_train = subparsers.add_parser('train',
@@ -78,9 +80,7 @@ def parse_args():
             help="Learning rate")
     parser_train.add_argument('--gamma', type=float, default=1,
             help="Loss weight of autoencoder")
-    parser_train.add_argument('-c', '--numclasses', type=int, required=True,
-            help="Total number of classes")
-    parser_train.add_argument('--aux', action='store_true',
+    parser_train.add_argument('--useaux', action='store_true',
             help="Use auxiliary networks to reduce number of parameters.")
     parser_train.add_argument('--autoencoder', action='store_true',
             help="Enable autoencoder")

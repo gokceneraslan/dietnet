@@ -24,17 +24,18 @@ from plinkio import plinkfile #install via pip: pip install plinkio
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+slim = tf.contrib.slim
 from sklearn.model_selection import KFold, train_test_split
 
 _int_feature = lambda v: tf.train.Int64List(value=v)
 _templ = {
         'dir':        '{pref}.diet',
-        'metadata':   '{pref}.diet/{pref}.metadata',
-        'phenomap':   '{pref}.diet/{pref}.phenomap',
-        'plinktrans': '{pref}.diet/{pref}_transpose',
-        'x_t':        '{pref}.diet/{pref}_transpose.npy',
-        'data':       '{pref}.diet/{pref}.tfrecords',
-        'fold':       '{pref}.diet/{pref}_fold{k}_{set}.tfrecords',
+        'metadata':   '{pref}.diet/metadata.json',
+        'phenomap':   '{pref}.diet/phenomap.tsv',
+        'plinktrans': '{pref}.diet/transpose',
+        'x_t':        '{pref}.diet/x_transpose.npy',
+        'data':       '{pref}.diet/data.tfrecords',
+        'fold':       '{pref}.diet/data_fold{k}_{set}.tfrecords',
 }
 
 
@@ -48,7 +49,8 @@ def write_records(prefix, phenotype_file,
                   nfolds=5,
                   phenotype_idcol=0,
                   phenotype_col=1,
-                  phenotype_categorical=True):
+                  phenotype_categorical=True,
+                  num_class = None):
 
     create_diet_dir(prefix)
 
@@ -80,6 +82,7 @@ def write_records(prefix, phenotype_file,
                          sep='\t', index=False)
 
         labels = pheno_list_cat.codes.astype(np.uint8)
+        num_class = num_class or len(set(labels))
     else:
         # TODO: Test that
         labels = pheno_list.as_matrix()
@@ -116,7 +119,9 @@ def write_records(prefix, phenotype_file,
                    'num_ind': num_ind,
                    'phenotype_categorical': phenotype_categorical,
                    'nfolds': nfolds,
-                   'num_ind_per_fold': [(len(x),len(y),len(z)) for x,y,z in cv_indices]}, f)
+                   'num_ind_per_fold': [(len(x),len(y),len(z)) for x,y,z in cv_indices],
+                   'num_class': num_class
+        }, f)
 
     # Write k-fold train/valid/test splits
     for i, (row, label) in enumerate(zip(X_plink, labels)): #iterates over individuals
@@ -170,15 +175,16 @@ def get_fold_files(prefix, fold=None, sets=('train', 'valid', 'test')):
     pattern = _templ['fold']
 
     if fold is not None:
-        yield [pattern.format(pref=prefix, k=fold+1, set=s) for s in sets]
+        yield [pattern.format(pref=prefix, k=fold, set=s) for s in sets]
     else:
-        for f in range(nfolds):
-            yield [pattern.format(pref=prefix, k=f+1, set=s) for s in sets]
+        for f in range(1, nfolds+1):
+            yield [pattern.format(pref=prefix, k=f, set=s) for s in sets]
 
 
-def read_batch_from_file(prefix, filename, batch_size, num_classes):
+def read_batch_from_file(prefix, filename, batch_size):
     meta = read_metadata(prefix)
-    num_snps = int(meta['num_snp'])
+    num_snps = meta['num_snp']
+    num_class = meta['num_class']
 
     reader = tf.TFRecordReader()
     filename_queue = tf.train.string_input_producer([filename])
@@ -195,7 +201,7 @@ def read_batch_from_file(prefix, filename, batch_size, num_classes):
                              batch_size=batch_size,
                              capacity=batch_size*50)
 
-    outputs['label'] = slim.one_hot_encoding(outputs['label'], num_classes)
+    outputs['label'] = slim.one_hot_encoding(outputs['label'], num_class)
 
     # squeeze to remove singletons
     outputs = {'genotype': tf.cast(tf.squeeze(outputs['genotype']), tf.float32),
@@ -204,17 +210,17 @@ def read_batch_from_file(prefix, filename, batch_size, num_classes):
     return outputs
 
 
-def read_batch_from_fold(prefix, batch_size, num_classes, fold=None,
+def read_batch_from_fold(prefix, batch_size, fold=None,
                          sets=('train', 'valid', 'test')):
     filenames = get_fold_files(prefix, fold=fold, sets=sets)
     for fold_file in filenames:
-        yield [read_batch_from_file(prefix, f, batch_size, num_classes)
+        yield [read_batch_from_file(prefix, f, batch_size)
                for f in fold_file]
 
 
 def read_transpose(prefix):
     xt = np.load(_templ['x_t'].format(pref=prefix))
-    return tf.convert_to_tensor(xt, tf.float32),
+    return tf.convert_to_tensor(xt, tf.float32)
 
 
 def preprocess(args):
@@ -222,4 +228,5 @@ def preprocess(args):
             nfolds=args.kfold,
             phenotype_idcol=args.phenoidcol,
             phenotype_col=args.phenocol,
-            phenotype_categorical=args.categorical)
+            phenotype_categorical=args.categorical,
+            num_class=args.numclasses)

@@ -13,6 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 
+import numpy as np
+import tensorflow as tf
+slim = tf.contrib.slim
+
 
 def embedding(inputs, size, dropout_rate=0.5, is_training=True, reuse=None, scope=None):
     with slim.arg_scope([slim.fully_connected],
@@ -94,11 +98,11 @@ def diet(input_size, output_size,
                                                      activation_fn=None,
                                                      scope='output')
 
-        entropy_loss = slim.losses.softmax_cross_entropy(class_predictions, labels)
+        entropy_loss = slim.losses.softmax_cross_entropy(class_predictions, outputs)
         tf.summary.scalar('loss/crossent_loss', entropy_loss)
         tf.summary.scalar('accuracy',
                 slim.metrics.accuracy(tf.argmax(class_predictions, 1),
-                                      tf.argmax(labels, 1)))
+                                      tf.argmax(outputs, 1)))
 
         if autoencoder:
             if use_aux:

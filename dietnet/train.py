@@ -20,20 +20,28 @@ from __future__ import print_function
 from .network import embedding, auxnet, diet
 from . import io
 
+import tensorflow as tf
+slim = tf.contrib.slim
+
 
 def train(args):
     meta = io.read_metadata(args.prefix)
-    x, xt, y = read_input(args.prefix, args.batchsize, args.numclasses)
-    loss = diet(input_size, output_size,
-               batch_size=args.batchsize,
-               hidden_size=args.hiddensize,
-               embedding_size=args.embeddingsize,
-               dropout_rate=1-args.dropoutrate, #switch to dropout keep prob.
-               is_training=True,
-               use_aux=args.aux,
-               gamma=args.gamma,
-               autoencoder=args.autoencoder,
-               share_embedding=args.shareembedding)
+    folds = io.read_batch_from_fold(args.prefix,
+                                    args.batchsize,
+                                    fold=args.fold,
+                                    sets=('train', 'valid'))
+    x_t = io.read_transpose(args.prefix)
+
+    loss = diet(meta['num_snp'], meta['num_class'],
+                batch_size=args.batchsize,
+                hidden_size=args.hiddensize,
+                embedding_size=args.embeddingsize,
+                dropout_rate=1-args.dropoutrate, #switch to dropout keep prob.
+                is_training=True,
+                use_aux=args.useaux,
+                gamma=args.gamma,
+                autoencoder=args.autoencoder,
+                share_embedding=args.shareembedding)
 
     optimizer = tf.train.RMSPropOptimizer(args.learningrate)
     train_op = slim.learning.create_train_op(loss, optimizer,
@@ -41,16 +49,32 @@ def train(args):
                                              clip_gradient_norm=10)
     summary_ops = tf.summary.merge_all()
 
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
-        tf.train.start_queue_runners()
-        #TODO: Handle checkpoint saver/restore
-        swriter = tf.summary.FileWriter(args.logdir, sess.graph)
+    for fold_i, (train, valid) in enumerate(folds):
 
-        for step in range(args.numsteps):
-            loss, summaries = sess.run([train_op, summary_ops])
-            swriter.add_summary(summaries)
+        # Create coordinator
+        coord = tf.train.Coordinator()
 
-        swriter.close()
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
+            #TODO: Handle checkpoint saver/restore
+            swriter = tf.summary.FileWriter('%s/fold%s' % (args.logdir, fold_i),
+                                            sess.graph)
+
+            try:
+                while True:
+                    loss, summaries = sess.run([train_op, summary_ops],
+                                               feed_dict={'inputs': train['genotypes'],
+                                                          'outputs': train['labels'],
+                                                          'xt': x_t})
+                    swriter.add_summary(summaries)
+            except Exception as e:
+                coord.request_stop()
+            finally:
+                coord.request_stop()
+                coord.join(threads)
+                swriter.close()
+
 
 
