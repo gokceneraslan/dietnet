@@ -75,7 +75,6 @@ def diet(inputs, outputs, xt,
         # see: https://github.com/tensorflow/tensorflow/issues/2514
         inputs  = tf.placeholder_with_default(inputs,  [None,  input_size], name='inputs')
         outputs = tf.placeholder_with_default(outputs, [None, output_size], name='outputs')
-        xt      = tf.placeholder_with_default(xt,      [input_size,  None], name='xt')
 
         if use_aux:
             embed = embedding(xt, embedding_size, dropout_rate=dropout_rate,

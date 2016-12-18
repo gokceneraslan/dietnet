@@ -41,7 +41,7 @@ def train(args):
                     embedding_size=args.embeddingsize,
                     dropout_rate=1-args.dropoutrate, #switch to dropout keep prob.
                     is_training=True,
-                    use_aux=args.useaux,
+                    use_aux=args.aux,
                     gamma=args.gamma,
                     autoencoder=args.autoencoder,
                     share_embedding=args.shareembedding)

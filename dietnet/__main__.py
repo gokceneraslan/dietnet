@@ -56,8 +56,6 @@ def parse_args():
     # train subparser
     parser_train = subparsers.add_parser('train',
             help='Start training using given training set.')
-    parser_train.set_defaults(func=train.train)
-
     parser_train.add_argument('prefix', type=str,
             help="Prefix of inputs e.g. genotypes if files "
             "are named genotypes.tfrecords")
@@ -82,15 +80,24 @@ def parse_args():
             help="Learning rate")
     parser_train.add_argument('--gamma', type=float, default=1,
             help="Loss weight of autoencoder")
-    parser_train.add_argument('--useaux', action='store_true',
+    parser_train.add_argument('--aux', action='store_true', dest='aux',
             help="Use auxiliary networks to reduce number of parameters.")
+    parser_train.add_argument('--no-aux', action='store_false', dest='aux',
+            help="Do not use auxiliary networks to reduce number of parameters.")
     parser_train.add_argument('--autoencoder', action='store_true',
-            help="Enable autoencoder")
+            dest='autoencoder', help="Enable autoencoder")
+    parser_train.add_argument('--no-autoencoder', action='store_false',
+            dest='autoencoder', help="Enable autoencoder")
     parser_train.add_argument('--embeddingtype', choices=['rawend2end'],
             help="Type of embedding: Only raw_end2end supported.",
             default='rawend2end')
     parser_train.add_argument('--shareembedding', action='store_true',
-            help="Share embeddings of auxiliary nets")
+            dest='shareembedding', help="Share embeddings of auxiliary nets")
+    parser_train.add_argument('--no-shareembedding', action='store_false',
+            dest='shareembedding', help="Share embeddings of auxiliary nets")
+
+    parser_train.set_defaults(aux=True, func=train.train, autoencoder=True,
+                              shareembedding=True)
 
     return parser.parse_args()
 
