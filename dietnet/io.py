@@ -135,19 +135,19 @@ def write_records(prefix, phenotype_file,
     np.save('{}_x_transpose.npy'.format(prefix), Xt)
 
 
-def get_fold_files(prefix):
+def get_fold_files(prefix, fold=None, sets=('train', 'valid', 'test')):
     meta = json.load(open('%s.dietmetadata' % prefix))
     nfolds = int(meta['nfolds'])
     pattern = '%s_fold%i_%s.tfrecords'
-    fold_files = {
-            'train': [pattern % (prefix, i+1, 'train') for i in range(nfolds)],
-            'valid': [pattern % (prefix, i+1, 'valid') for i in range(nfolds)],
-            'test':  [pattern % (prefix, i+1, 'test')  for i in range(nfolds)]}
 
-    return fold_files
+    if fold is not None:
+        yield [pattern % (prefix, fold+1, s) for s in sets]
+    else:
+        for f in range(nfolds):
+            yield [pattern % (prefix, f+1, s) for s in sets]
 
 
-def read_input(prefix, filename, batch_size):
+def read_batch_from_file(prefix, filename, batch_size):
     meta = json.load(open('%s.dietmetadata' % prefix))
     num_snps = int(meta['num_snp'])
 
@@ -166,7 +166,18 @@ def read_input(prefix, filename, batch_size):
                              batch_size=batch_size,
                              capacity=batch_size*50)
 
-    return tf.squeeze(outputs['genotype']), tf.squeeze(outputs['label'])
+    # squeeze to remove singletons
+    outputs= {'genotype': tf.squeeze(outputs['genotype']),
+              'label':    tf.squeeze(outputs['label'])}
+
+    return outputs
+
+
+def read_batch_from_fold(prefix, batch_size, fold=None,
+                         sets=('train', 'valid', 'test')):
+    filenames = get_fold_files(prefix, fold=fold, sets=sets)
+    for fold_file in filenames:
+        yield [read_batch_from_file(prefix, f, batch_size) for f in fold_file]
 
 
 def preprocess(args):
