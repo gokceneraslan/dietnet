@@ -85,16 +85,16 @@ def parse_args():
     parser_train.add_argument('--no-aux', action='store_false', dest='aux',
             help="Do not use auxiliary networks to reduce number of parameters.")
     parser_train.add_argument('--autoencoder', action='store_true',
-            dest='autoencoder', help="Enable autoencoder")
+            dest='autoencoder', help="Enable autoencoder (default)")
     parser_train.add_argument('--no-autoencoder', action='store_false',
-            dest='autoencoder', help="Enable autoencoder")
+            dest='autoencoder', help="Disable autoencoder")
     parser_train.add_argument('--embeddingtype', choices=['rawend2end'],
             help="Type of embedding: Only raw_end2end supported.",
             default='rawend2end')
     parser_train.add_argument('--shareembedding', action='store_true',
-            dest='shareembedding', help="Share embeddings of auxiliary nets")
+            dest='shareembedding', help="Share embeddings of auxiliary nets (default)")
     parser_train.add_argument('--no-shareembedding', action='store_false',
-            dest='shareembedding', help="Share embeddings of auxiliary nets")
+            dest='shareembedding', help="Do not share embeddings of auxiliary nets")
 
     parser_train.set_defaults(aux=True, func=train.train, autoencoder=True,
                               shareembedding=True)
