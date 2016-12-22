@@ -34,6 +34,9 @@ _templ = {
         'phenomap':   '{pref}.diet/phenomap.tsv',
         'plinktrans': '{pref}.diet/transpose',
         'x_t':        '{pref}.diet/x_transpose.npy',
+        'npy':        '{pref}.diet/data.npy',
+        'npy_fold':   '{pref}.diet/data_fold{k}_{set}.npy',
+        'y':          '{pref}.diet/y.npy',
         'data':       '{pref}.diet/data.tfrecords',
         'fold':       '{pref}.diet/data_fold{k}_{set}.tfrecords',
 }
@@ -50,7 +53,11 @@ def write_records(prefix, phenotype_file,
                   phenotype_idcol=0,
                   phenotype_col=1,
                   phenotype_categorical=True,
+                  save_tfrecords=True,
+                  save_npy=False,
                   num_class = None):
+
+    assert save_tfrecords or save_npy, 'Either TFRecords or NPY must be specified'
 
     create_diet_dir(prefix)
 
@@ -87,29 +94,9 @@ def write_records(prefix, phenotype_file,
         # TODO: Test that
         labels = pheno_list.as_matrix()
 
-    # Transpose bed file to get X matrix
-    trans_filename = _templ['plinktrans'].format(pref=prefix)
-    # Produces transposed BED file
-    print('Transposing plink file...')
-    assert Xt_plink.transpose(trans_filename), 'Transpose failed'
-
-    # Open transposed file and iterate over records
-    X_plink = plinkfile.open(trans_filename)
-
-    assert len(labels) == num_ind, 'Number of labels is not equal to num individuals'
-    wr = lambda i, t: tf.python_io.TFRecordWriter(_templ['fold'].format(pref=prefix,
-                                                                        k=i,
-                                                                        set=t))
-    tf_writers = [{
-        'train': wr(i+1, 'train'),
-        'valid': wr(i+1, 'valid'),
-        'test':  wr(i+1, 'test')} for i in range(nfolds)]
-
-    tf_writer_all = tf.python_io.TFRecordWriter(_templ['data'].format(pref=prefix))
-
     # Prepare indices for k-fold cv and train/valid/test split
     cv_indices = []
-    for cv_trainval, cv_test in KFold(nfolds).split(range(num_ind)):
+    for cv_trainval, cv_test in KFold(nfolds, True, 42).split(range(num_ind)):
         cv_train, cv_val = train_test_split(cv_trainval, test_size=1/(nfolds-1))
         cv_indices.append((cv_train, cv_val, cv_test))
 
@@ -123,34 +110,79 @@ def write_records(prefix, phenotype_file,
                    'num_class': num_class
         }, f)
 
+    # Transpose bed file to get X matrix
+    trans_filename = _templ['plinktrans'].format(pref=prefix)
+    # Produces transposed BED file
+    print('Transposing plink file...')
+    assert Xt_plink.transpose(trans_filename), 'Transpose failed'
+
+    # Open transposed file and iterate over records
+    X_plink = plinkfile.open(trans_filename)
+    assert not X_plink.one_locus_per_row(), 'PLINK file should be transposed'
+    assert len(labels) == num_ind, 'Number of labels is not equal to num individuals'
+
+    if save_tfrecords:
+        wr = lambda i, t: tf.python_io.TFRecordWriter(_templ['fold'].format(pref=prefix,
+                                                                            k=i,
+                                                                            set=t))
+        tf_writers = [{
+            'train': wr(i+1, 'train'),
+            'valid': wr(i+1, 'valid'),
+            'test':  wr(i+1, 'test')} for i in range(nfolds)]
+
+        tf_writer_all = tf.python_io.TFRecordWriter(_templ['data'].format(pref=prefix))
+
+    if save_npy:
+        X = np.zeros((num_ind, num_snps), np.int8)
+
     # Write k-fold train/valid/test splits
     for i, (row, label) in enumerate(zip(X_plink, labels)): #iterates over individuals
-        example = tf.train.Example(features=tf.train.Features(feature={
-            'genotype': tf.train.Feature(int64_list=_int_feature(list(row))),
-            'label':    tf.train.Feature(int64_list=_int_feature([int(label)]))}))
 
-        for fold, (train_idx, valid_idx, test_idx) in zip(range(nfolds), cv_indices):
-            serialized_example = example.SerializeToString()
-            if i in train_idx:
-                tf_writers[fold]['train'].write(serialized_example)
-            elif i in valid_idx:
-                tf_writers[fold]['valid'].write(serialized_example)
-            elif i in test_idx:
-                tf_writers[fold]['test'].write(serialized_example)
-            else:
-                raise 'Not valid index'
-        tf_writer_all.write(serialized_example)
+        if save_tfrecords:
+            # Save TFRecords
+            example = tf.train.Example(features=tf.train.Features(feature={
+                'genotype': tf.train.Feature(int64_list=_int_feature(list(row))),
+                'label':    tf.train.Feature(int64_list=_int_feature([int(label)]))}))
+
+            for fold, (train_idx, valid_idx, test_idx) in zip(range(nfolds), cv_indices):
+                serialized_example = example.SerializeToString()
+                if i in train_idx:
+                    tf_writers[fold]['train'].write(serialized_example)
+                elif i in valid_idx:
+                    tf_writers[fold]['valid'].write(serialized_example)
+                elif i in test_idx:
+                    tf_writers[fold]['test'].write(serialized_example)
+                else:
+                    raise 'Not valid index'
+            tf_writer_all.write(serialized_example)
+
+        if save_npy:
+            X[i, :] = list(row)
 
         if i % 100 == 0:
             print('Writing genotypes... {:.2f}% completed'.format((i/num_ind)*100), end='\r')
             sys.stdout.flush()
+
+    # Save fold as npy if requested
+    if save_npy:
+        for i, (train_idx, valid_idx, test_idx) in zip(range(nfolds), cv_indices):
+            fold_filename = _templ['npy_fold'].format(pref=prefix, k=i+1, set='train')
+            np.save(fold_filename, X[train_idx,])
+            fold_filename = _templ['npy_fold'].format(pref=prefix, k=i+1, set='valid')
+            np.save(fold_filename, X[valid_idx,])
+            fold_filename = _templ['npy_fold'].format(pref=prefix, k=i+1, set='test')
+            np.save(fold_filename, X[test_idx,])
+
+        np.save(_templ['npy'].format(pref=prefix), X)
+
     print('\nDone')
 
-    for fold in range(nfolds):
-        tf_writers[fold]['train'].close()
-        tf_writers[fold]['valid'].close()
-        tf_writers[fold]['test'].close()
-    tf_writer_all.close()
+    if save_tfrecords:
+        for fold in range(nfolds):
+            tf_writers[fold]['train'].close()
+            tf_writers[fold]['valid'].close()
+            tf_writers[fold]['test'].close()
+        tf_writer_all.close()
 
     Xt = np.zeros([num_snps, num_ind], np.int8)
     for i, row in enumerate(Xt_plink): #iterates over snps
@@ -229,4 +261,6 @@ def preprocess(args):
             phenotype_idcol=args.phenoidcol,
             phenotype_col=args.phenocol,
             phenotype_categorical=args.categorical,
+            save_tfrecords=args.savequeue,
+            save_npy=args.savenpy,
             num_class=args.numclasses)

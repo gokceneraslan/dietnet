@@ -35,7 +35,6 @@ def parse_args():
     # Preprocess subparser
     parser_preprocess = subparsers.add_parser('preprocess',
             help='Convert plink format to required TFRecords and split CV folds')
-    parser_preprocess.set_defaults(func=io.preprocess)
 
     parser_preprocess.add_argument('prefix', type=str, help='PLINK prefix')
     parser_preprocess.add_argument('-p', '--pheno', type=str,
@@ -48,10 +47,25 @@ def parse_args():
     parser_preprocess.add_argument('-j', '--phenocol', type=int,
             help='0-based column index of phenotypes in phenotype file (default=1)',
             default=1)
-    parser_preprocess.add_argument('-c', '--categorical', type=bool,
-            help='Phenotype is categorical (default=True)', default=True)
+    parser_preprocess.add_argument('-c', '--categorical',
+            dest='categorical', action='store_true',
+            help='Phenotype is categorical (default=True)')
+    parser_preprocess.add_argument('--savequeue', dest='savequeue',
+            action='store_true',
+            help='Save data in TFRecords format (default=True)')
+    parser_preprocess.add_argument('--no-savequeue', dest='savequeue',
+            action='store_false',
+            help='Do not save data in TFRecords format')
+    parser_preprocess.add_argument('--savenpy', dest='savenpy',
+            action='store_true',
+            help='Save data in numpy format (default=False)')
+    parser_preprocess.add_argument('--no-savenpy', dest='savequeue',
+            action='store_false',
+            help='Do not save data in numpy format')
     parser_preprocess.add_argument('-s', '--numclasses', type=int, default=None,
             help="Total number of classes (auto by default)")
+    parser_preprocess.set_defaults(func=io.preprocess, categorical=True,
+                                   savequeue=True)
 
     # train subparser
     parser_train = subparsers.add_parser('train',
