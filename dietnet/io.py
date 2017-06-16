@@ -201,10 +201,16 @@ def read_metadata(prefix):
     return meta
 
 
-def get_fold_files(prefix, fold=None, sets=('train', 'valid', 'test')):
+def get_fold_files(prefix, fold=None, sets=('train', 'valid', 'test'),
+                   file_format='tfrecords'):
     meta = read_metadata(prefix)
     nfolds = meta['nfolds']
-    pattern = _templ['fold']
+    if file_format == 'tfrecords':
+        pattern = _templ['fold']
+    elif file_format == 'npy':
+        pattern = _templ['npy_fold']
+    else:
+        raise Exception('Unknown input format')
 
     if fold is not None:
         yield [pattern.format(pref=prefix, k=fold, set=s) for s in sets]
@@ -213,25 +219,43 @@ def get_fold_files(prefix, fold=None, sets=('train', 'valid', 'test')):
             yield [pattern.format(pref=prefix, k=f, set=s) for s in sets]
 
 
-def read_batch_from_file(prefix, filename, batch_size):
+def read_batch_from_file(prefix, filename, batch_size, file_format='tfrecords'):
     meta = read_metadata(prefix)
     num_snps = meta['num_snp']
     num_class = meta['num_class']
 
-    reader = tf.TFRecordReader()
-    filename_queue = tf.train.string_input_producer([filename])
+    if file_format == 'tfrecords':
+        reader = tf.TFRecordReader()
+        filename_queue = tf.train.string_input_producer([filename])
 
-    _, serialized_example = reader.read(filename_queue)
-    features = tf.parse_single_example(
-        serialized_example,
-        features={
-            'genotype': tf.FixedLenFeature([num_snps], tf.int64),
-            'label':    tf.FixedLenFeature([1], tf.int64)
-        })
+        _, serialized_example = reader.read(filename_queue)
+        features = tf.parse_single_example(
+            serialized_example,
+            features={
+                'genotype': tf.FixedLenFeature([num_snps], tf.int64),
+                'label':    tf.FixedLenFeature([1], tf.int64)
+            })
 
-    outputs = tf.train.batch(features,
-                             batch_size=batch_size,
-                             capacity=batch_size*50)
+        outputs = tf.train.batch(features,
+                                 batch_size=batch_size,
+                                 capacity=batch_size*50)
+    elif file_format == 'npy':
+        x = np.load(filename)
+        y = np.load(_templ['y'].format(pref=prefix))
+        x_batch, y_batch = tf.train.shuffle_batch([x, y],
+                                                  batch_size,
+                                                  enqueue_many=True,
+                                                  capacity=batch_size*100,
+                                                  min_after_dequeue=batch_size*30)
+        y_batch = slim.one_hot_encoding(y_batch, num_classes)
+        assert(x_batch.get_shape()[0] == y_batch.get_shape()[0])
+
+        return (tf.cast(x_batch, tf.float32),
+                tf.convert_to_tensor(xt, tf.float32),
+                tf.cast(y_batch, tf.float32))
+
+    else:
+        raise Exception('Invalid input file format')
 
     outputs['label'] = slim.one_hot_encoding(outputs['label'], num_class)
 
