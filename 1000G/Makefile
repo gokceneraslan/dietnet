@@ -5,7 +5,7 @@ TEMP=genotmp
 TEMP_GROUP=$(TEMP).bed $(TEMP).bim $(TEMP).fam
 OUT=genotypes
 OUT_GROUP=$(OUT).bed $(OUT).bim $(OUT).fam
-OUT_NPY=$(OUT)_x.npy $(OUT)_y.npy
+OUT_NPY=$(OUT)_x.npy
 
 all: finalize removetemp
 
