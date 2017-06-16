@@ -7,7 +7,7 @@ Unofficial implementation of [diet networks](http://openreview.net/forum?id=Sk-o
 ## Requirements:
 
 - Python 2.7 or 3.5
-- [TensorFlow](https://www.tensorflow.org) >= 0.12rc0. See [installation instructions](https://www.tensorflow.org/versions/r0.11/get_started/os_setup.html#pip-installation).
+- [TensorFlow](https://www.tensorflow.org) >= 1.1.0. See [installation instructions](https://www.tensorflow.org/install/install_linux#InstallingNativePip).
 - numpy
 - [plinkio](https://pypi.python.org/pypi/plinkio) (only for preprocessing) Install via pip e.g. `pip install plinkio`
 - [plink2](https://www.cog-genomics.org/plink2) (only for preprocessing) This can be easily installed via [Bioconda](http://bioconda.github.io) e.g. `conda install -c bioconda plink2`
@@ -17,48 +17,12 @@ Unofficial implementation of [diet networks](http://openreview.net/forum?id=Sk-o
 ## Usage:
 
 - Install the requirements above. Use plink2numpy to preprocess PLINK files and run dietnet script with `--prefix` option.
-- To reproduce 1000G results, run `make` command in `1000G` folder. (~700MB file will be downloaded) Then run `./dietnet --prefix 1000G/genotypes`
-- See command line arguments for available options:
-
-```
-usage: dietnet [-h] [--prefix PREFIX] [--batchsize BATCHSIZE]
-               [--hiddensize HIDDENSIZE] [--embeddingsize EMBEDDINGSIZE]
-               [--learningrate LEARNINGRATE] [--gamma GAMMA]
-               [--numclasses NUMCLASSES] [--aux [AUX]] [--noaux]
-               [--autoencoder [AUTOENCODER]] [--noautoencoder]
-               [--embeddingtype EMBEDDINGTYPE]
-               [--shareembedding [SHAREEMBEDDING]] [--noshareembedding]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --prefix PREFIX       Prefix of inputs e.g. genotypes if files are named genotypes_x.npy
-  --batchsize BATCHSIZE
-                        Batch size
-  --hiddensize HIDDENSIZE
-                        Size of hidden layers
-  --embeddingsize EMBEDDINGSIZE
-                        Size of embedding layers
-  --learningrate LEARNINGRATE
-                        Learning rate
-  --gamma GAMMA         Loss weight of autoencoder
-  --numclasses NUMCLASSES
-                        Total number of classes
-  --aux [AUX]           Use auxiliary networks to reduce number of parameters.
-  --noaux
-  --autoencoder [AUTOENCODER]
-                        Enable autoencoder
-  --noautoencoder
-  --embeddingtype EMBEDDINGTYPE
-                        Type of embedding: Only raw_end2end supported.
-  --shareembedding [SHAREEMBEDDING]
-                        Share embeddings of auxiliary nets
-  --noshareembedding
-```
+- To reproduce 1000G results, install dietnet e.g. `python setup.py install` and run `make` command in `1000G` folder. (~700MB file will be downloaded) Finally, run `./dietnet train 1000G/genotypes`
 
 ## TODO:
 
 - ~~Dropout~~
-- Bias terms for We and Wd
+- ~~Bias terms for We and Wd~~
 - ~~Summary ops and tensorboard screenshots. also misclass. err~~
 - K-fold CV
 - Make train and predict subcommands e.g. add placeholders
