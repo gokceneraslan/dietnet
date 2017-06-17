@@ -5,7 +5,7 @@ TEMP=genotmp
 TEMP_GROUP=$(TEMP).bed $(TEMP).bim $(TEMP).fam
 OUT=genotypes
 OUT_GROUP=$(OUT).bed $(OUT).bim $(OUT).fam
-OUT_NPY=$(OUT)_x.npy
+OUT_PREP=$(OUT).diet
 
 all: finalize removetemp
 
@@ -27,7 +27,7 @@ $(OUT_GROUP): $(TEMP_GROUP)
 	#exclude snps in high LD
 	plink2 --bfile $(TEMP) --exclude $(TEMP).prune.out --threads 4 --make-bed --out $(OUT)
 
-$(OUT_NPY): $(OUT_GROUP)
+$(OUT_PREP): $(OUT_GROUP)
 	#install dietnet first
 	dietnet preprocess $(OUT) -p $(ORIG_PANEL) -k 5
 
@@ -41,4 +41,4 @@ clean: removetemp
 
 download: $(ORIG) $(ORIG_PANEL)
 preprocess: $(OUT_GROUP)
-finalize: $(OUT_NPY)
+finalize: $(OUT_PREP)
