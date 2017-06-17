@@ -19,6 +19,7 @@ setup(
     install_requires=[tf,
                       'numpy>=1.7',
                       'six>=1.10.0',
+                      'bcolz',
                       'plinkio', #for preprocessing
                       'pandas', #for preprocessing
                       'scikit-learn'], #only for k-fold and train/valid/test split
