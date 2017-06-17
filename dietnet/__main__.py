@@ -59,6 +59,9 @@ def parse_args():
     parser_preprocess.add_argument('--savenpy', dest='savenpy',
             action='store_true',
             help='Save data in numpy format (default=False)')
+    parser_preprocess.add_argument('--disk', dest='disk',
+            action='store_true',
+            help='Do not load the entire plink file to memory')
     parser_preprocess.add_argument('--no-savenpy', dest='savequeue',
             action='store_false',
             help='Do not save data in numpy format')

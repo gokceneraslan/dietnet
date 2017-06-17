@@ -64,7 +64,8 @@ def write_records(prefix, phenotype_file,
                   phenotype_idcol=0,
                   phenotype_col=1,
                   phenotype_categorical=True,
-                  num_class = None):
+                  num_class = None,
+                  disk = False):
 
     bc.cparams.setdefaults(shuffle=0)
     create_diet_dir(prefix)
@@ -128,8 +129,13 @@ def write_records(prefix, phenotype_file,
     assert not X_plink.one_locus_per_row(), 'PLINK file should be transposed'
     assert len(labels) == num_ind, 'Number of labels is not equal to num individuals'
 
-    X = bc.zeros((num_ind, num_snps), np.int8, rootdir=config.x, mode='w')
-    Y = bc.zeros((num_ind, ), rootdir=config.y, mode='w')
+    if not disk:
+        X = np.zeros((num_ind, num_snps), np.int8)
+        Y = np.zeros((num_ind, ))
+    else:
+        X = bc.zeros((num_ind, num_snps), np.int8, rootdir=config.x, mode='w')
+        Y = bc.zeros((num_ind, ), rootdir=config.y, mode='w')
+
     folds = {'train': [], 'valid': [], 'test': [],
              'ytrain': [], 'yvalid': [], 'ytest': []}
 
@@ -152,24 +158,37 @@ def write_records(prefix, phenotype_file,
     for i, (row, label) in enumerate(zip(X_plink, labels)): #iterates over individuals
         for fold, (train_idx, valid_idx, test_idx) in zip(range(nfolds), cv_indices):
 
-            if i in train_idx:
-                folds['train'][fold][train_idx.index(i)] = list(row)
-                folds['ytrain'][fold][train_idx.index(i)] = label
-            elif i in valid_idx:
-                folds['valid'][fold][valid_idx.index(i)] = list(row)
-                folds['yvalid'][fold][valid_idx.index(i)] = label
-            elif i in test_idx:
-                folds['test'][fold][test_idx.index(i)] = list(row)
-                folds['ytest'][fold][test_idx.index(i)] = label
-            else:
-                raise 'Not valid index'
+            if disk:
+                if i in train_idx:
+                    folds['train'][fold][train_idx.index(i)] = list(row)
+                    folds['ytrain'][fold][train_idx.index(i)] = label
+                elif i in valid_idx:
+                    folds['valid'][fold][valid_idx.index(i)] = list(row)
+                    folds['yvalid'][fold][valid_idx.index(i)] = label
+                elif i in test_idx:
+                    folds['test'][fold][test_idx.index(i)] = list(row)
+                    folds['ytest'][fold][test_idx.index(i)] = label
+                else:
+                    raise 'Not valid index'
 
-        X[i] = list(row)
+        X[i, :] = list(row)
         Y[i] = label
 
         if i % 100 == 0:
             print('Writing genotypes... {:.2f}% completed'.format((i/num_ind)*100), end='\r')
             sys.stdout.flush()
+
+    if not disk:
+        X = bc.carray(X, rootdir=config.x, mode='w')
+        Y = bc.carray(Y, rootdir=config.y, mode='w')
+
+        for fold, (train_idx, valid_idx, test_idx) in zip(range(nfolds), cv_indices):
+            folds['train'][fold][:]  = X[train_idx]
+            folds['ytrain'][fold][:] = Y[train_idx]
+            folds['valid'][fold][:]  = X[valid_idx]
+            folds['yvalid'][fold][:] = Y[valid_idx]
+            folds['test'][fold][:]   = X[test_idx]
+            folds['ytest'][fold][:]  = Y[test_idx]
 
     X.flush()
     for fold in range(nfolds):
@@ -180,13 +199,23 @@ def write_records(prefix, phenotype_file,
         folds['test'][fold].flush()
         folds['ytest'][fold].flush()
     print('\nDone')
+    del(X)
+    del(folds)
 
-    Xt = bc.zeros([num_snps, num_ind], np.int8, rootdir=config.x_t, mode='w')
+    if not disk:
+        Xt = np.zeros([num_snps, num_ind], np.int8)
+    else:
+        Xt = bc.zeros([num_snps, num_ind], np.int8, rootdir=config.x_t, mode='w')
+
     for i, row in enumerate(Xt_plink): #iterates over snps
         Xt[i,:] = row
         if i % 1000 == 0:
             print('Writing X transpose matrix... {:.2f}% completed'.format((i/num_snps)*100), end='\r')
             sys.stdout.flush()
+
+    if not disk:
+        Xt = bc.carray(Xt, rootdir=config.x_t, mode='w')
+
     print('\nDone')
     Xt.flush()
 
@@ -255,4 +284,5 @@ def preprocess(args):
             phenotype_idcol=args.phenoidcol,
             phenotype_col=args.phenocol,
             phenotype_categorical=args.categorical,
-            num_class=args.numclasses)
+            num_class=args.numclasses,
+            disk=args.disk)
