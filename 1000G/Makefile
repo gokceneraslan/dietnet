@@ -4,7 +4,7 @@ ORIG_PANEL=affy_samples.20141118.panel
 TEMP=genotmp
 TEMP_GROUP=$(TEMP).bed $(TEMP).bim $(TEMP).fam
 OUT=genotypes
-OUT_GROUP=$(OUT).bed $(OUT).bim $(OUT).fam
+OUT_GROUP=$(OUT).bed $(OUT).bim $(OUT).fam $(OUT).nosex $(OUT).log
 OUT_PREP=$(OUT).diet
 
 all: finalize removetemp
@@ -34,6 +34,7 @@ $(OUT_PREP): $(OUT_GROUP)
 .PHONY: removetemp
 removetemp:
 	-rm -rf $(TEMP)*
+	-rm -rf $(OUT_GROUP)
 
 .PHONY: clean
 clean: removetemp

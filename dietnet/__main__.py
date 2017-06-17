@@ -20,8 +20,6 @@ from __future__ import print_function
 import os, sys, argparse
 import numpy as np
 import six
-import tensorflow as tf
-slim = tf.contrib.slim
 
 from . import io, train
 
@@ -50,25 +48,12 @@ def parse_args():
     parser_preprocess.add_argument('-c', '--categorical',
             dest='categorical', action='store_true',
             help='Phenotype is categorical (default=True)')
-    parser_preprocess.add_argument('--savequeue', dest='savequeue',
-            action='store_true',
-            help='Save data in TFRecords format (default=True)')
-    parser_preprocess.add_argument('--no-savequeue', dest='savequeue',
-            action='store_false',
-            help='Do not save data in TFRecords format')
-    parser_preprocess.add_argument('--savenpy', dest='savenpy',
-            action='store_true',
-            help='Save data in numpy format (default=False)')
     parser_preprocess.add_argument('--disk', dest='disk',
             action='store_true',
             help='Do not load the entire plink file to memory')
-    parser_preprocess.add_argument('--no-savenpy', dest='savequeue',
-            action='store_false',
-            help='Do not save data in numpy format')
     parser_preprocess.add_argument('-s', '--numclasses', type=int, default=None,
             help="Total number of classes (auto by default)")
-    parser_preprocess.set_defaults(func=io.preprocess, categorical=True,
-                                   savequeue=True)
+    parser_preprocess.set_defaults(func=io.preprocess, categorical=True)
 
     # train subparser
     parser_train = subparsers.add_parser('train',
