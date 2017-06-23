@@ -26,8 +26,7 @@ import bcolz as bc
 import pandas as pd
 from sklearn.model_selection import KFold, train_test_split
 
-from .sequence import BcolzSequence
-from .data_utils import OrderedEnqueuer
+from .sequence import BcolzSequence, OrderedEnqueuer
 
 
 class Config:
